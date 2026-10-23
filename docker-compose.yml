@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aerobag
+      POSTGRES_PASSWORD: aerobag_dev
+      POSTGRES_DB: aerobag
+    ports:
+      - "5433:5432"   # 5433: bilgisayarındaki olası yerel Postgres ile çakışmasın
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aerobag -d aerobag"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

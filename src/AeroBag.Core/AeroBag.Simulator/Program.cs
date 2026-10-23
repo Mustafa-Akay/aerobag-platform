@@ -48,9 +48,12 @@ foreach (var f in flights)
 }
 
 Console.WriteLine("Örnek yolcular (yolcu sayfasında PNR + soyad ile sorgulanır):");
-foreach (var b in flights[0].Bags.Take(3))
+foreach (var f in flights)
 {
-    Console.WriteLine($"  PNR {b.Pnr}  soyad {b.Surname}  (bavul {b.BagTag}, uçuş {b.FlightId})");
+    foreach (var b in f.Bags.Take(2))
+    {
+        Console.WriteLine($"  PNR {b.Pnr}  soyad {b.Surname}  (bavul {b.BagTag}, uçuş {b.FlightId})");
+    }
 }
 
 if (mode == "csv")

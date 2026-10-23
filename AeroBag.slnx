@@ -1,10 +1,13 @@
 <Solution>
   <Folder Name="/src/" />
   <Folder Name="/src/AeroBag.Core/">
+    <Project Path="src/AeroBag.Core/AeroBag.Api/AeroBag.Api.csproj" />
     <Project Path="src/AeroBag.Core/AeroBag.Application/AeroBag.Application.csproj" />
     <Project Path="src/AeroBag.Core/AeroBag.Domain/AeroBag.Domain.csproj" />
+    <Project Path="src/AeroBag.Core/AeroBag.Infrastructure/AeroBag.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/AeroBag.IntegrationTests/AeroBag.IntegrationTests.csproj" />
     <Project Path="tests/AeroBag.UnitTests/AeroBag.UnitTests.csproj" />
   </Folder>
 </Solution>

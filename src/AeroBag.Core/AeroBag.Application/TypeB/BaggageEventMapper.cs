@@ -16,7 +16,9 @@ public sealed record BaggageEvent(
     string IdempotencyKey,
     string? Pnr,
     string? ScanPoint,
-    string MessageType);
+    string MessageType,
+    string? Surname,
+    string? CabinClass);
 
 public static class BaggageEventMapper
 {
@@ -67,7 +69,7 @@ public static class BaggageEventMapper
         var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
 
         result = new BaggageEvent(m.BagTag, m.Sequence, m.FlightNumber, m.FlightDate, m.Airport,
-            state, occurred, key, m.Pnr, m.ScanPoint, m.Kind.ToString().ToUpperInvariant());
+            state, occurred, key, m.Pnr, m.ScanPoint, m.Kind.ToString().ToUpperInvariant(), m.Surname, m.CabinClass);
         return true;
     }
 }

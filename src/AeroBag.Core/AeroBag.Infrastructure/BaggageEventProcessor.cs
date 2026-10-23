@@ -12,7 +12,7 @@ namespace AeroBag.Infrastructure;
 /// Ayrıştırılamayan mesaj ölü mektup tablosuna gider. Aynı bavul için işlemler
 /// advisory lock ile sıraya dizilir; aynı idempotency_key ikinci kez işlenmez.
 /// </summary>
-public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider clock)
+public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider clock, LookupKeyHasher hasher)
 {
     public static readonly TimeSpan ExitDeadline = TimeSpan.FromSeconds(180);
 
@@ -71,6 +71,30 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
             await flightCmd.ExecuteNonQueryAsync(ct);
         }
 
+        // Yolcu yalnızca HMAC arama anahtarıyla saklanır (ad, soyad ve PNR düz metin tutulmaz).
+        Guid? passengerId = null;
+        if (ev.Pnr is not null && ev.Surname is not null)
+        {
+            var lookupKey = hasher.Compute(ev.Pnr, ev.Surname);
+            await using (var pc = Cmd(conn, tx,
+                             """
+                             INSERT INTO passengers (passenger_id, flight_id, lookup_key, cabin_class)
+                             VALUES (@id, @f, @k, @c)
+                             ON CONFLICT (flight_id, lookup_key) DO NOTHING
+                             """,
+                             P("id", Guid.NewGuid()), P("f", flightId), PB("k", lookupKey), P("c", ev.CabinClass ?? "Y")))
+            {
+                await pc.ExecuteNonQueryAsync(ct);
+            }
+
+            await using (var ps = Cmd(conn, tx,
+                             "SELECT passenger_id FROM passengers WHERE flight_id = @f AND lookup_key = @k",
+                             P("f", flightId), PB("k", lookupKey)))
+            {
+                passengerId = (Guid?)await ps.ExecuteScalarAsync(ct);
+            }
+        }
+
         var bagId = Guid.NewGuid();
         var bagExists = false;
         BagState? current = null;
@@ -102,10 +126,10 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
         {
             await using var ins = Cmd(conn, tx,
                 """
-                INSERT INTO bags (bag_id, bag_tag_number, flight_id, current_state, state_version, exit_cleared, updated_at_utc)
-                VALUES (@id, @t, @f, @s, 1, @ec, @now)
+                INSERT INTO bags (bag_id, bag_tag_number, flight_id, passenger_id, current_state, state_version, exit_cleared, updated_at_utc)
+                VALUES (@id, @t, @f, @p, @s, 1, @ec, @now)
                 """,
-                P("id", bagId), P("t", ev.BagTag), P("f", flightId), P("s", StateNames.ToDb(newState)),
+                P("id", bagId), P("t", ev.BagTag), P("f", flightId), P("p", passengerId), P("s", StateNames.ToDb(newState)),
                 P("ec", exitCleared), P("now", received));
             await ins.ExecuteNonQueryAsync(ct);
         }
@@ -119,6 +143,15 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
                 """,
                 P("s", StateNames.ToDb(newState)), P("ec", exitCleared), P("now", received), P("id", bagId));
             await upd.ExecuteNonQueryAsync(ct);
+        }
+
+        if (bagExists && passengerId is not null)
+        {
+            // Bavul BSM'den önce başka bir olayla oluşmuş olabilir; yolcu sonradan bağlanır.
+            await using var link = Cmd(conn, tx,
+                "UPDATE bags SET passenger_id = @p WHERE bag_id = @id AND passenger_id IS NULL",
+                P("p", passengerId), P("id", bagId));
+            await link.ExecuteNonQueryAsync(ct);
         }
 
         var payload = JsonSerializer.Serialize(new
@@ -209,6 +242,8 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
     }
 
     private static NpgsqlParameter P(string name, object? value) => new(name, value ?? DBNull.Value);
+
+    private static NpgsqlParameter PB(string name, byte[] bytes) => new(name, NpgsqlDbType.Bytea) { Value = bytes };
 
     private static NpgsqlParameter J(string name, string json) => new(name, NpgsqlDbType.Jsonb) { Value = json };
 }

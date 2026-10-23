@@ -85,6 +85,14 @@ public class PassengerLookupTests(PostgresFixture fx) : IClassFixture<PostgresFi
         Assert.Equal("UNLOADED_AT_ARRIVAL", bag.State);
         Assert.NotNull(bag.Eta);
         Assert.True(bag.Eta!.P10Utc <= bag.Eta.P50Utc && bag.Eta.P50Utc <= bag.Eta.P90Utc);
+
+        // BSM'in alınma zamanı (14:00) referans anı değildir; referans, son zaman taşıyan olaydır (BUM, 12:10).
+        // Geçmiş veri yok, sabit varsayılan aralık: 300/540/900 saniye.
+        Assert.Equal(new DateTimeOffset(2026, 10, 22, 12, 10, 0, TimeSpan.Zero), result.AsOfUtc);
+        Assert.Equal("FALLBACK", bag.Eta.Basis);
+        Assert.Equal(300, bag.Eta.P10SecondsFromNow);
+        Assert.Equal(540, bag.Eta.P50SecondsFromNow);
+        Assert.Equal(900, bag.Eta.P90SecondsFromNow);
     }
 
     [Fact]

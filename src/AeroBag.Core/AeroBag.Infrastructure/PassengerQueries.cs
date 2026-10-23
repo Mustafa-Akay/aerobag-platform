@@ -78,7 +78,9 @@ public sealed class PassengerQueries(
 
     private async Task<DateTimeOffset?> MaxEventTimeAsync(CancellationToken ct)
     {
-        await using var cmd = db.CreateCommand("SELECT max(occurred_at_utc) FROM baggage_events");
+        await using var cmd = db.CreateCommand(
+            // BSM mesajı zaman taşımaz (olay zamanı = alınma anı), bu yüzden sanal saati bozmasın diye dışarıda bırakılır.
+            "SELECT max(occurred_at_utc) FROM baggage_events WHERE message_type <> 'BSM'");
         await using var r = await cmd.ExecuteReaderAsync(ct);
         await r.ReadAsync(ct);
         return r.IsDBNull(0) ? null : r.GetFieldValue<DateTimeOffset>(0);

@@ -47,6 +47,12 @@ foreach (var f in flights)
         $"ilk bavul {(first.CarouselUtc - f.Info.OnBlockUtc).TotalMinutes:F1} dk, son bavul {(last.CarouselUtc - f.Info.OnBlockUtc).TotalMinutes:F1} dk (iniş sonrası)");
 }
 
+Console.WriteLine("Örnek yolcular (yolcu sayfasında PNR + soyad ile sorgulanır):");
+foreach (var b in flights[0].Bags.Take(3))
+{
+    Console.WriteLine($"  PNR {b.Pnr}  soyad {b.Surname}  (bavul {b.BagTag}, uçuş {b.FlightId})");
+}
+
 if (mode == "csv")
 {
     var path = Get("out", Path.Combine("data", "synthetic", "bags.csv"));

@@ -91,12 +91,15 @@ public static class FlightGenerator
             var security = checkIn.AddMinutes(rng.Uniform(5, 15));
             var loaded = departure.AddMinutes(-rng.Uniform(15, 35));
 
-            bags.Add(new BagTruth(flightId, tag, i, checkIn, security, loaded, unload[i], chute[i],
-                carouselT[i], claim[i], i == firstIdx, i == lastIdx));
-
             var pnr = new string(Enumerable.Range(0, 6).Select(_ => PnrChars[rng.Int(0, PnrChars.Length)]).ToArray());
+            var surname = rng.Pick(Surnames);
+            var given = rng.Pick(Givens);
+
+            bags.Add(new BagTruth(flightId, tag, i, checkIn, security, loaded, unload[i], chute[i],
+                carouselT[i], claim[i], i == firstIdx, i == lastIdx, pnr, surname));
+
             messages.Add(new ScheduledMessage(checkIn,
-                MessageFormatter.Bsm(flightNumber, date, tag, rng.Int(8, 31), rng.Pick(Surnames), rng.Pick(Givens), pnr),
+                MessageFormatter.Bsm(flightNumber, date, tag, rng.Int(8, 31), surname, given, pnr),
                 tag, "BSM"));
             messages.Add(new ScheduledMessage(security,
                 MessageFormatter.Bpm(flightNumber, date, tag, "SEC01", security), tag, "SEC"));

@@ -24,15 +24,20 @@ public static class EtaEstimator
         DurationQuantiles? unloadToCarousel,
         DurationQuantiles? chuteToCarousel)
     {
-        var (measured, fallback) = state switch
+        DurationQuantiles? measured;
+        DurationQuantiles fallback;
+        switch (state)
         {
-            BagState.UnloadedAtArrival => (unloadToCarousel, FallbackUnloadToCarousel),
-            BagState.InboundChute => (chuteToCarousel, FallbackChuteToCarousel),
-            _ => (null, null),
-        };
-        if (fallback is null)
-        {
-            return null;
+            case BagState.UnloadedAtArrival:
+                measured = unloadToCarousel;
+                fallback = FallbackUnloadToCarousel;
+                break;
+            case BagState.InboundChute:
+                measured = chuteToCarousel;
+                fallback = FallbackChuteToCarousel;
+                break;
+            default:
+                return null;
         }
 
         var useHistory = measured is { Samples: >= MinSamples };

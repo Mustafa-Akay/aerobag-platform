@@ -32,7 +32,9 @@ public sealed record BagTruth(
     DateTimeOffset CarouselUtc,
     DateTimeOffset ClaimUtc,
     bool IsFirst,
-    bool IsLast);
+    bool IsLast,
+    string Pnr,
+    string Surname);
 
 public sealed record ScheduledMessage(DateTimeOffset TimeUtc, string Text, string BagTag, string Kind);
 

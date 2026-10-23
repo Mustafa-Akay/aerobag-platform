@@ -11,7 +11,8 @@ public class BaggageEventProcessorTests(PostgresFixture fx) : IClassFixture<Post
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private BaggageEventProcessor NewProcessor() => new(fx.Db, new FixedClock(Now));
+    private BaggageEventProcessor NewProcessor() =>
+        new(fx.Db, new FixedClock(Now), new LookupKeyHasher(System.Text.Encoding.UTF8.GetBytes("test-secret-0123456789abcdef")));
 
     private static string NewTag() => Random.Shared.NextInt64(1_000_000_000, 9_999_999_999).ToString();
 

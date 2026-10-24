@@ -1,13 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getFlights, type FlightSummary } from "../api";
 import { clockTime, decimalMinutes } from "../format";
+import { useCoalescedTick, useLive } from "../live";
 
-const POLL_MS = 3000;
+const POLL_FAST_MS = 3000;
+const POLL_SLOW_MS = 20000;
 
 export function OpsPage() {
   const [flights, setFlights] = useState<FlightSummary[] | null>(null);
   const [error, setError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+
+  const [tick, signal] = useCoalescedTick(1000);
+  const live = useLive({ kind: "ops" }, "flightsChanged", signal);
+  const pollMs = useRef(POLL_FAST_MS);
+  pollMs.current = live === "live" ? POLL_SLOW_MS : POLL_FAST_MS;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -20,14 +27,14 @@ export function OpsPage() {
       } catch {
         if (!controller.signal.aborted) setError(true);
       }
-      if (!controller.signal.aborted) timer = window.setTimeout(run, POLL_MS);
+      if (!controller.signal.aborted) timer = window.setTimeout(run, pollMs.current);
     };
     void run();
     return () => {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, []);
+  }, [tick]);
 
   return (
     <div>
@@ -75,7 +82,11 @@ export function OpsPage() {
           </table>
         </div>
       )}
-      {updatedAt && <p className="mt-3 text-xs text-steel">Son güncelleme {clockTime(updatedAt)}.</p>}
+      {updatedAt && (
+        <p className="mt-3 text-xs text-steel">
+          Son güncelleme {clockTime(updatedAt)}. {live === "live" ? "Canlı bağlantı açık." : "Sayfa 3 saniyede bir yenilenir."}
+        </p>
+      )}
     </div>
   );
 }

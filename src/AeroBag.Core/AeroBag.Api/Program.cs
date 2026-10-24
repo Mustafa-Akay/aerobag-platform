@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
+using AeroBag.Api;
 using AeroBag.Application.TypeB;
 using AeroBag.Infrastructure;
 using Npgsql;
@@ -21,6 +22,12 @@ builder.Services.AddSingleton<BagQueries>();
 builder.Services.AddSingleton<EtaStatistics>();
 builder.Services.AddSingleton<PassengerQueries>();
 builder.Services.AddSingleton<OpsQueries>();
+
+// Outbox -> SignalR: veritabanına yazılan olaylar arka planda içeriksiz canlı bildirimlere çevrilir.
+builder.Services.AddSingleton<OutboxRelay>();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IOutboxPublisher, SignalROutboxPublisher>();
+builder.Services.AddHostedService<OutboxBackgroundService>();
 
 // Yolcu sorgusu PNR denemesine açık olduğu için IP başına dakikada 20 istekle sınırlı.
 builder.Services.AddRateLimiter(o =>
@@ -85,6 +92,8 @@ app.MapGet("/v1/lookup", async (string? pnr, string? surname, PassengerQueries q
 
 // Operasyon panosu: uçuş bazında sayaçlar. (Kimlik doğrulama sonraki fazda eklenecek, şimdilik yalnızca yerel demo.)
 app.MapGet("/v1/flights", async (OpsQueries ops, CancellationToken ct) => Results.Ok(await ops.FlightsAsync(ct)));
+
+app.MapHub<LiveHub>("/hubs/live");
 
 app.Run();
 

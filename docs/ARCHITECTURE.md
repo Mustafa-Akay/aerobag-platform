@@ -1,6 +1,8 @@
 # AeroBag: Bagaj Yolculuğu, ETA/SLA Tahmini ve Çıkış Doğrulama
 ## Mimari ve Veri Akışı Tasarım Dokümanı (v2.1)
 
+> **Not:** Bu belge hedef tasarımdır. Şu an çalışan kodun tasarımdan ayrıştığı noktalar ve bilinen eksikler için [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) dosyasına bakın.
+
 **Durum:** v2.1 taslak. Simülasyon verisiyle çalışan bir mühendislik portfolyo projesidir. Gerçek kurum verisi, gerçek yolcu verisi ya da canlı havalimanı sistemleri kullanılmaz.
 
 Bu doküman; havayolu, yer hizmetleri şirketi ve havalimanı işletmecisi operasyonlarına yönelik bir bagaj yolculuğu platformunun yazılım mimarisini, veri akışını, girdi/çıktı sözleşmelerini, değerlendirme yöntemini ve güvenlik yaklaşımını tanımlar. Dokümandaki tüm firma, yolcu, PNR ve mesaj örnekleri **kurgusaldır**.

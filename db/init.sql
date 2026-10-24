@@ -64,6 +64,7 @@ CREATE TABLE baggage_events (
 CREATE INDEX idx_baggage_events_bag ON baggage_events(bag_id, occurred_at_utc);
 
 CREATE TABLE outbox_messages (
+  seq              BIGSERIAL   NOT NULL,          -- teslim sırası (created_at eşit olabilir)
   id               UUID PRIMARY KEY,
   topic            VARCHAR(64) NOT NULL,
   partition_key    VARCHAR(40) NOT NULL,
@@ -72,7 +73,7 @@ CREATE TABLE outbox_messages (
   attempts         INT         NOT NULL DEFAULT 0,
   processed_at_utc TIMESTAMPTZ
 );
-CREATE INDEX idx_outbox_pending ON outbox_messages(created_at_utc) WHERE processed_at_utc IS NULL;
+CREATE INDEX idx_outbox_pending ON outbox_messages(seq) WHERE processed_at_utc IS NULL;
 
 CREATE TABLE exit_deadlines (
   bag_id      UUID PRIMARY KEY REFERENCES bags(bag_id),

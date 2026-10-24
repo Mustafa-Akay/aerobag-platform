@@ -1,10 +1,13 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ApiError, lookup, type LookupResult } from "../api";
 import { BagTagCard } from "../components/BagTagCard";
 import { clockTime } from "../format";
+import { useCoalescedTick, useLive } from "../live";
 
 type Query = { pnr: string; surname: string };
-const POLL_MS = 3000;
+const POLL_FAST_MS = 3000; // canlı bağlantı yokken
+const POLL_SLOW_MS = 20000; // canlı bağlantı varken yalnızca güvenlik ağı
+const LOOKUP_LIMIT_PER_MIN = 20; // sunucudaki hız sınırı; birleştirme aralığı buna göre seçildi
 
 function errorText(error: unknown): string {
   if (error instanceof ApiError) {
@@ -14,14 +17,43 @@ function errorText(error: unknown): string {
   return "Sunucuya ulaşamadık. Bağlantınızı kontrol edip tekrar deneyin.";
 }
 
+const STORAGE_KEY = "aerobag.lastQuery";
+
+/** Sayfalar arası geçişte aramayı korumak için; yalnızca bu sekmenin oturumunda tutulur. */
+function loadSaved(): Query | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<Query>;
+    return typeof value.pnr === "string" && typeof value.surname === "string" ? { pnr: value.pnr, surname: value.surname } : null;
+  } catch {
+    return null;
+  }
+}
+
+function save(query: Query): void {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(query));
+  } catch {
+    // Depolama kapalıysa arama yine çalışır, yalnızca hatırlanmaz.
+  }
+}
+
 export function PassengerPage() {
-  const [pnr, setPnr] = useState("");
-  const [surname, setSurname] = useState("");
-  const [query, setQuery] = useState<Query | null>(null);
+  const saved = loadSaved();
+  const [pnr, setPnr] = useState(saved?.pnr ?? "");
+  const [surname, setSurname] = useState(saved?.surname ?? "");
+  const [query, setQuery] = useState<Query | null>(saved);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+
+  const [tick, signal] = useCoalescedTick((60_000 / LOOKUP_LIMIT_PER_MIN) * 1.5);
+  const tags = useMemo(() => result?.bags.map((b) => b.bagTag) ?? [], [result]);
+  const live = useLive(tags.length > 0 ? { kind: "bags", tags } : null, "bagChanged", signal);
+  const pollMs = useRef(POLL_FAST_MS);
+  pollMs.current = live === "live" ? POLL_SLOW_MS : POLL_FAST_MS;
 
   useEffect(() => {
     if (!query) return;
@@ -34,13 +66,13 @@ export function PassengerPage() {
         setResult(data);
         setError(null);
         setUpdatedAt(new Date());
-        timer = window.setTimeout(run, POLL_MS);
+        timer = window.setTimeout(run, pollMs.current);
       } catch (e) {
         if (controller.signal.aborted) return;
         setResult(null);
         setError(errorText(e));
         // 404/429 sonrası otomatik yeniden denemeyi durdur; ağ hatasında sürdür.
-        if (!(e instanceof ApiError)) timer = window.setTimeout(run, POLL_MS * 2);
+        if (!(e instanceof ApiError)) timer = window.setTimeout(run, POLL_FAST_MS * 2);
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -52,7 +84,7 @@ export function PassengerPage() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, tick]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -64,7 +96,9 @@ export function PassengerPage() {
     }
     setResult(null);
     setError(null);
-    setQuery({ pnr: p, surname: s });
+    const next = { pnr: p, surname: s };
+    save(next);
+    setQuery(next);
   };
 
   return (
@@ -115,7 +149,7 @@ export function PassengerPage() {
         {result?.bags.map((bag) => (
           <BagTagCard key={`${bag.bagTag}-${bag.flightId}`} bag={bag} />
         ))}
-        {result && updatedAt && <p className="text-xs text-steel">Son güncelleme {clockTime(updatedAt)}. Sayfa kendiliğinden yenilenir.</p>}
+        {result && updatedAt && <p className="text-xs text-steel">Son güncelleme {clockTime(updatedAt)}. {live === "live" ? "Canlı bağlantı açık, değişiklikler anında gelir." : "Sayfa kendiliğinden yenilenir."}</p>}
       </section>
     </div>
   );

@@ -1,4 +1,6 @@
 {
+  "bag_target": "dur_s",
+  "n_bags": 138949,
   "features": [
     "wide",
     "rain",

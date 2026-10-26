@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { getFlights, type FlightSummary } from "../api";
+import { getFlights, getFlightSla, type FlightSla, type FlightSummary } from "../api";
+import { SlaPanel } from "../components/SlaPanel";
 import { clockTime, decimalMinutes } from "../format";
 import { useCoalescedTick, useLive } from "../live";
 
@@ -8,6 +9,7 @@ const POLL_SLOW_MS = 20000;
 
 export function OpsPage() {
   const [flights, setFlights] = useState<FlightSummary[] | null>(null);
+  const [sla, setSla] = useState<FlightSla[] | null>(null);
   const [error, setError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
@@ -22,6 +24,11 @@ export function OpsPage() {
     const run = async () => {
       try {
         setFlights(await getFlights(controller.signal));
+        try {
+          setSla(await getFlightSla(controller.signal));
+        } catch {
+          if (!controller.signal.aborted) setSla(null);
+        }
         setError(false);
         setUpdatedAt(new Date());
       } catch {
@@ -86,6 +93,7 @@ export function OpsPage() {
           </table>
         </div>
       )}
+      {sla && sla.length > 0 && <SlaPanel rows={sla} />}
       {updatedAt && (
         <p className="mt-3 text-xs text-steel">
           Son güncelleme {clockTime(updatedAt)}. {live === "live" ? "Canlı bağlantı açık." : "Sayfa 3 saniyede bir yenilenir."}

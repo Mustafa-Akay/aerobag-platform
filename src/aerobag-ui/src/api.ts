@@ -5,7 +5,7 @@ export type EtaView = {
   p10SecondsFromNow: number;
   p50SecondsFromNow: number;
   p90SecondsFromNow: number;
-  basis: "HISTORY" | "FALLBACK" | "ML";
+  basis: "HISTORY" | "FALLBACK" | "ML" | "ML_FLIGHT" | "PHYSICS";
 };
 
 export type PassengerBag = {
@@ -36,6 +36,29 @@ export type FlightSummary = {
   firstBagMinutes: number | null;
 };
 
+export type SlaStatus = "MET" | "BREACHED" | "ON_TRACK" | "AT_RISK" | "LIKELY_BREACH" | "UNKNOWN";
+
+export type SlaLeg = {
+  targetSec: number;
+  actualSec: number | null;
+  breachProbability: number | null;
+  status: SlaStatus;
+  projectedP50Sec: number | null;
+  projectedP90Sec: number | null;
+  projectedDelayP50Sec: number | null;
+  projectedDelayP90Sec: number | null;
+};
+
+export type FlightSla = {
+  flightId: string;
+  assumption: string;
+  onBlockUtc: string | null;
+  elapsedSec: number | null;
+  allBagsArrived: boolean;
+  firstBag: SlaLeg;
+  lastBag: SlaLeg;
+};
+
 export class ApiError extends Error {
   readonly status: number;
 
@@ -60,4 +83,8 @@ export function lookup(pnr: string, surname: string, signal?: AbortSignal): Prom
 
 export function getFlights(signal?: AbortSignal): Promise<FlightSummary[]> {
   return getJson<FlightSummary[]>("/v1/flights", signal);
+}
+
+export function getFlightSla(signal?: AbortSignal): Promise<FlightSla[]> {
+  return getJson<FlightSla[]>("/v1/flights/sla", signal);
 }

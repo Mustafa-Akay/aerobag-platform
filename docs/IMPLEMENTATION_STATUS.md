@@ -98,3 +98,19 @@ Tasarımdan farklar ve bilinen sınırlar:
 - **"Şimdi" sanal saattir:** worker, BSM olmayan olayların en son zamanını kullanır (yolcu ETA'sı ve takılı bavul sayacıyla aynı kabul). Olay akışı durursa saat de durur ve süre dolumları o zamana kadar işlenmez. Örneğin son uçuşun son bavulları, ardından başka olay gelmezse "çıkış okunmadı" olmaz. Gerçek kurulumda gerçek saat kullanılmalıdır.
 - Worker ile aynı anda gelen bir çıkış okuması için bavul satırında açık bir kilit yok; sonuç her iki sırada da `EXIT_CLEARED` olur, ama arada fazladan bir `EXIT_OVERDUE` olayı yazılmış olabilir.
 - Çıkış süresi sabit 180 sn (`BaggageEventProcessor.ExitDeadline`), yapılandırılabilir değil.
+
+## Söz #1: bavul bazlı ETA ve fizik
+
+- Pazar `basis` değerleri: HISTORY, FALLBACK (ampirik), ML_FLIGHT (indirme öncesi uçuş düzeyi), ML (bavul bazlı: indirme anı + model saniyesi), PHYSICS (şutta mesafe / bant hızı ± 15 sn; ML kapalıyken de çalışır).
+- Bavul düzeyi model yalnızca uçuş özelliklerini kullanır; indirme sırası ve on-block sonrası süre özellikleri kazanç sağlamadı (bkz. EVALUATION.md, "Bavul düzeyi ETA").
+- Fizik sonucu simülatörün aynı formülle üretmesi nedeniyle dairesel; gerçek donanım kanıtı değildir.
+- Servis uçları: `/v1/predict-bag`, `/v1/outcome-bags`. Şema değişti: `docker compose down -v` gerekir.
+
+## Söz #2: SLA ve gecikme riski (DEMO hedefleri)
+
+- Uç: `GET /v1/flights/sla`. Uçuş başına ilk ve son bagaj için hedef, gerçekleşen ya da tahmin, ihlal olasılığı, beklenen gecikme (P50/P90) ve durum (MET, ON_TRACK, AT_RISK, LIKELY_BREACH, BREACHED, UNKNOWN).
+- Hedefler `flights.sla_first_bag_sec` (900) ve `sla_last_bag_sec` (1800); on-block'tan ölçülür. Rakamlar demo varsayımıdır, yanıtta `assumption: DEMO_ASSUMPTION` yazar.
+- İhlal olasılığı: uçuş düzeyindeki modelin P10/P50/P90 kuantillerinden parça parça doğrusal bir dağılım kurulur (yaklaşıklık). Süre geçtikçe "henüz olmadı" koşuluyla güncellenir. Son bagaj, uçuştaki tüm bagajlar banda geçince gerçek değere döner.
+- ML kapalıyken tahmin alanları boş, durum UNKNOWN olur; gerçekleşen ya da süresi dolmuş durumlar yine raporlanır.
+- ARCHITECTURE 6.2'deki `suggestion` (kaynak artırımı önerisi) uygulanmadı.
+- Bu olasılıkların kalibrasyonu (örneğin "%60 dediğimiz uçuşların kaçı gerçekten aştı") henüz ayrıca ölçülmedi.

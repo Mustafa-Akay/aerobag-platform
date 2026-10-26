@@ -11,11 +11,16 @@ class Predictor:
     """Model + canli artik duzeltmesi. Duzeltme yalnizca /outcome ile bildirilmis (yani gercekten bitmis)
     ucuslarin artiklarindan hesaplanir; bu yuzden gecikme dogal olarak uygulanir. Durum bellekte tutulur (tek ornek)."""
 
-    def __init__(self, model_dir, window=40, min_n=10, max_pending=5000):
+    def __init__(self, model_dir, window=40, min_n=10, max_pending=5000, bag_window=1000, bag_min_n=50):
         d = pathlib.Path(model_dir)
         self.meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
         self.features = self.meta["features"]
         self.models = {t: {q: lgb.Booster(model_file=str(d / f"{t}_q{int(q*100)}.txt")) for q in QS} for t in TARGETS}
+        # Bavul duzeyi model (indirmeden banta, saniye) ve onun canli duzeltmesi
+        self.bag_models = {q: lgb.Booster(model_file=str(d / f"dur_s_q{int(q*100)}.txt")) for q in QS}
+        self.bag_window = bag_window
+        self.bag_min_n = bag_min_n
+        self.bag_res = {q: deque(maxlen=bag_window) for q in QS}
         self.min_n = min_n
         self.res = {t: {q: deque(maxlen=window) for q in QS} for t in TARGETS}
         self.pending = {}          # flight_id -> ham tahminler
@@ -53,3 +58,28 @@ class Predictor:
                 for i, q in enumerate(QS):
                     self.res[t][q].append(actual[t] - raw[t][i])
         return True
+
+    # ---- bavul duzeyi (indirmeden banta gecen sure, saniye) ----
+    def _bag_raw(self, x):
+        row = np.array([[x[f] for f in self.features]], dtype=float)
+        return np.sort([self.bag_models[q].predict(row)[0] for q in QS])
+
+    def predict_bag(self, x):
+        raw = self._bag_raw(x)
+        with self.lock:
+            n = len(self.bag_res[0.5])
+            adapted = n >= self.bag_min_n
+            v = list(raw)
+            if adapted:
+                v = [v[i] + float(np.quantile(self.bag_res[q], q)) for i, q in enumerate(QS)]
+                v[0], v[2] = min(v[0], v[1]), max(v[2], v[1])
+        return {"p10": max(v[0], 1.0), "p50": max(v[1], 1.0), "p90": max(v[2], 1.0)}, adapted, n
+
+    def outcome_bags(self, items):
+        """items: [(ozellik sozlugu, gercek sure saniye)]. Ham tahmin burada yeniden hesaplanir (durumsuz)."""
+        raws = [(self._bag_raw(x), y) for x, y in items]
+        with self.lock:
+            for raw, y in raws:
+                for i, q in enumerate(QS):
+                    self.bag_res[q].append(y - raw[i])
+        return len(raws)

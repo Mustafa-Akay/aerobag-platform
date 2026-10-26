@@ -24,6 +24,7 @@ builder.Services.AddSingleton<EtaStatistics>();
 builder.Services.AddSingleton<FlightContextStore>();
 builder.Services.AddSingleton<PassengerQueries>();
 builder.Services.AddSingleton<OpsQueries>();
+builder.Services.AddSingleton<SlaQueries>();
 
 // ML tahmin servisi (Faz 2). Ml:BaseUrl boşsa kapalıdır; servis erişilemezse sistem taban çizgisine düşer.
 var mlUrl = builder.Configuration["Ml:BaseUrl"] ?? "http://localhost:8000";
@@ -110,6 +111,9 @@ app.MapGet("/v1/lookup", async (string? pnr, string? surname, PassengerQueries q
 
 // Operasyon panosu: uçuş bazında sayaçlar. (Kimlik doğrulama sonraki fazda eklenecek, şimdilik yalnızca yerel demo.)
 app.MapGet("/v1/flights", async (OpsQueries ops, CancellationToken ct) => Results.Ok(await ops.FlightsAsync(ct)));
+
+// SLA ve gecikme riski (DEMO hedefleri): ilk/son bavul için hedef, gerçekleşen ya da tahmin, ihlal olasılığı.
+app.MapGet("/v1/flights/sla", async (SlaQueries sla, CancellationToken ct) => Results.Ok(await sla.GetAsync(ct)));
 
 // AODB uçuş bağlamı beslemesi (ML tahmini için). Kimlik doğrulama sonraki fazda; şimdilik yalnızca yerel demo.
 app.MapPost("/v1/flights/context", async (FlightContext body, FlightContextStore store, CancellationToken ct) =>

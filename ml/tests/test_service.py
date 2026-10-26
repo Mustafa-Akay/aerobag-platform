@@ -57,3 +57,32 @@ def test_outcomes_shift_predictions_after_enough_samples(client):
 def test_unknown_outcome_is_not_recorded_and_bad_order_rejected(client):
     assert client.post("/v1/outcome", json={"flight_id": "NOPE-1", "first_min": 5, "last_min": 9}).json()["recorded"] is False
     assert client.post("/v1/outcome", json={"flight_id": "NOPE-1", "first_min": 9, "last_min": 5}).status_code == 422
+
+
+FEAT = dict(wide=0, rain=0, bags=120, stand_m=1000, chute_m=50, speed=0.55, arrivals_30=2, handler="HANDLER_B")
+
+
+def test_predict_bag_shape_and_order(client):
+    r = client.post("/v1/predict-bag", json=FEAT).json()
+    v = r["seconds_after_unload"]
+    assert r["basis"] == "ML" and r["adapted"] is False
+    assert 60 < v["p10"] <= v["p50"] <= v["p90"] < 1800
+
+
+def test_predict_bag_rejects_invalid_input(client):
+    assert client.post("/v1/predict-bag", json={**FEAT, "handler": "X"}).status_code == 422
+    assert client.post("/v1/predict-bag", json={**FEAT, "bags": 0}).status_code == 422
+
+
+def test_bag_outcomes_shift_predictions_after_enough_samples(client):
+    base = client.post("/v1/predict-bag", json=FEAT).json()["seconds_after_unload"]["p50"]
+    items = [{"features": FEAT, "duration_s": base + 120} for _ in range(60)]
+    assert client.post("/v1/outcome-bags", json={"items": items}).json()["recorded"] == 60
+    r = client.post("/v1/predict-bag", json=FEAT).json()
+    assert r["adapted"] is True and r["adaptation_samples"] == 60
+    assert r["seconds_after_unload"]["p50"] > base + 100
+
+
+def test_bag_outcomes_batch_is_bounded(client):
+    items = [{"features": FEAT, "duration_s": 300}] * 501
+    assert client.post("/v1/outcome-bags", json={"items": items}).status_code == 422

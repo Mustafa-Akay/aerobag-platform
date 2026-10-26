@@ -557,7 +557,7 @@ Uçak boyutu sınıfına (dar gövde / geniş gövde) göre ilk bavul süresinin
 2. Eğitim/test ayrımı **uçuş bazında** yapılır (aynı uçuşun bavulları iki kümeye bölünmez).
 3. Model **rejim A** (normal operasyon) ile eğitilir; **rejim B** (yoğun saat, yağmur, farklı yer hizmetleri parametreleri) ile test edilir. Dağılım kaymasında metriklerin ne kadar bozulduğu raporlanır.
 4. Özellik önemleri ve "simülasyona özgü özellikleri çıkarınca" sonuç değişimi (ablasyon) raporlanır.
-5. Simülatör parametreleri, kamuya açık referanslarla (örn. bildirilen ortalama teslim süreleri, tipik ilk bavul aralıkları) **kalibre** edilir ve kaynakları `docs/EVALUATION.md` dosyasında listelenir.
+5. Simülatör çıktısı, kamuya açık referanslarla (Prag, Hong Kong, BCAS hedefleri) büyüklük mertebesi açısından **karşılaştırılır**; bu bir makullük kontrolüdür, kalibrasyon değildir. Parametreler bu verilere göre ayarlanmadı ve gerçek havalimanı verisiyle doğrulanmadı. Kaynaklar ve sonuçlar `docs/EVALUATION.md` dosyasındadır.
 
 Sonuçlar `docs/EVALUATION.md` dosyasında tekrarlanabilir komutlarla birlikte yayınlanır. Olumsuz sonuçlar (modelin taban çizgisini geçemediği durumlar) da raporlanır.
 

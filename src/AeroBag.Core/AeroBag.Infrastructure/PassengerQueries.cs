@@ -60,35 +60,59 @@ public sealed class PassengerQueries(
         var unloadToCarousel = await stats.UnloadToCarouselAsync(ct);
         var chuteToCarousel = await stats.ChuteToCarouselAsync(ct);
 
-        // İniş öncesi bavullar için ampirik ETA yoktur; uçuş bağlamı ve ML servisi varsa uçuş düzeyinde tahmin kullanılır.
-        // Servis kapalıysa ya da bağlam yoksa eskisi gibi ETA gösterilmez (taban çizgisine düşüş).
-        var mlByFlight = new Dictionary<string, EtaWindow?>();
-        if (ml is not null && contexts is not null)
+        // ML ve fizik tahmini için uçuş bağlamı gerekir. Servis kapalıysa ya da bağlam yoksa eskisi gibi davranılır
+        // (iniş öncesinde ETA yok; indirme ve şut aşamasında ampirik ETA).
+        var preWindows = new Dictionary<string, EtaWindow?>();
+        var bagForecasts = new Dictionary<string, BagDurationForecast?>();
+        var ctxs = new Dictionary<string, FlightContext>();
+        if (contexts is not null)
         {
-            var preFlights = rows
-                .Where(r => (int)StateNames.FromDb(r.State)!.Value < (int)BagState.UnloadedAtArrival)
+            var flightsNeeding = rows
+                .Where(r => (int)StateNames.FromDb(r.State)!.Value < (int)BagState.OnCarousel)
                 .Select(r => r.Flight).Distinct().ToList();
-            var ctxs = await contexts.GetAsync(preFlights, ct);
-            foreach (var flightId in preFlights)
+            ctxs = await contexts.GetAsync(flightsNeeding, ct);
+
+            if (ml is not null)
             {
-                EtaWindow? w = null;
-                if (ctxs.TryGetValue(flightId, out var c) && await ml.PredictAsync(c, ct) is { } forecast)
+                foreach (var row in rows)
                 {
-                    w = MlEtaWindow.Build(c, forecast, asOf);
+                    var st = StateNames.FromDb(row.State)!.Value;
+                    if (!ctxs.TryGetValue(row.Flight, out var c))
+                    {
+                        continue;
+                    }
+                    if ((int)st < (int)BagState.UnloadedAtArrival && !preWindows.ContainsKey(row.Flight))
+                    {
+                        preWindows[row.Flight] = await ml.PredictAsync(c, ct) is { } f ? MlEtaWindow.Build(c, f, asOf) : null;
+                    }
+                    else if (st == BagState.UnloadedAtArrival && !bagForecasts.ContainsKey(row.Flight))
+                    {
+                        bagForecasts[row.Flight] = await ml.PredictBagAsync(c, ct);
+                    }
                 }
-                mlByFlight[flightId] = w;
             }
         }
 
         var bags = rows.Select(row =>
         {
             var state = StateNames.FromDb(row.State)!.Value;
-            var window = row.LastEvent is { } last
-                ? EtaEstimator.Estimate(state, last, unloadToCarousel, chuteToCarousel)
-                : null;
-            if (window is null && mlByFlight.TryGetValue(row.Flight, out var mlWindow))
+            EtaWindow? window = null;
+            if ((int)state < (int)BagState.UnloadedAtArrival)
             {
-                window = mlWindow;
+                preWindows.TryGetValue(row.Flight, out window);
+            }
+            else if (row.LastEvent is { } last)
+            {
+                if (state == BagState.UnloadedAtArrival && bagForecasts.TryGetValue(row.Flight, out var bf) && bf is not null)
+                {
+                    window = MlEtaWindow.BuildForBag(last, bf);
+                }
+                else if (state == BagState.InboundChute && ctxs.TryGetValue(row.Flight, out var pc))
+                {
+                    window = PhysicsEtaWindow.Build(last, pc);
+                }
+
+                window ??= EtaEstimator.Estimate(state, last, unloadToCarousel, chuteToCarousel);
             }
             return new PassengerBagView(row.Tag, row.Flight, row.State, window is null ? null : ToView(window, asOf));
         }).ToList();

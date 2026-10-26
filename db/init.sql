@@ -105,3 +105,9 @@ CREATE TABLE flight_context (
   outcome_reported BOOLEAN          NOT NULL DEFAULT FALSE,
   received_at_utc  TIMESTAMPTZ      NOT NULL DEFAULT now()
 );
+
+-- ML servisine bildirilmiş bavul sonuçları (bavul düzeyi canlı düzeltme için; her bavul bir kez bildirilir).
+CREATE TABLE ml_bag_outcomes (
+  bag_id           UUID PRIMARY KEY REFERENCES bags(bag_id),
+  reported_at_utc  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

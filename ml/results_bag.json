@@ -1,0 +1,82 @@
+{
+  "n_train_bags": 138949,
+  "n_test_bags": 56217,
+  "target": "unload_to_carousel_seconds",
+  "in_regime_cv": {
+    "baseline": {
+      "p50_mae": 1.5989534863064656,
+      "pinball_avg": 0.48759507329963486,
+      "coverage_p10_p90": 0.8010059289771293,
+      "late_rate_p90": 0.098906763740137,
+      "late_rate_p50": 0.4986793195642519,
+      "width_p10_p90": 5.013333333333334
+    },
+    "lgbm": {
+      "p50_mae": 0.7230299890362492,
+      "pinball_avg": 0.2448577512539801,
+      "coverage_p10_p90": 0.7881741340514266,
+      "late_rate_p90": 0.10384385930106546,
+      "late_rate_p50": 0.5002555213825317,
+      "width_p10_p90": 2.206378099503062
+    }
+  },
+  "shift_A_to_B": {
+    "baseline": {
+      "p50_mae": 2.526331892488037,
+      "pinball_avg": 0.8391039286257814,
+      "coverage_p10_p90": 0.5976483981713716,
+      "late_rate_p90": 0.37499332941992636,
+      "late_rate_p50": 0.726043723428856,
+      "width_p10_p90": 5.0
+    },
+    "lgbm": {
+      "p50_mae": 1.7685393244649337,
+      "pinball_avg": 0.59385292649195,
+      "coverage_p10_p90": 0.4518028354412366,
+      "late_rate_p90": 0.5477346710069908,
+      "late_rate_p50": 0.9721080811854066,
+      "width_p10_p90": 2.177294738851446
+    },
+    "lgbm_recalibrated": {
+      "p50_mae": 0.9952915186124823,
+      "pinball_avg": 0.32848445149785116,
+      "coverage_p10_p90": 0.7720974082572887,
+      "late_rate_p90": 0.11055374708718003,
+      "late_rate_p50": 0.5010939751320775,
+      "width_p10_p90": 3.1582055944222684
+    }
+  },
+  "ablation_shift_p50_mae_min": {
+    "ucus_ozellikleri": 1.7685393244649337,
+    "+indirme_sirasi": 1.7704287931620684,
+    "+onblock_sonrasi_sure": 1.77127287202669,
+    "yalniz_govde_yagmur": 2.6440070770778954,
+    "fizik_yok": 2.606323073456346
+  },
+  "chute_stage_shift": {
+    "empirical": {
+      "p50_mae": 0.3321753206325489,
+      "pinball_avg": 0.09490702693728469,
+      "coverage_p10_p90": 0.7502890584698578,
+      "late_rate_p90": 0.08468968461497411,
+      "late_rate_p50": 0.46244018713200635,
+      "width_p10_p90": 0.9499999999999998
+    },
+    "physics": {
+      "p50_mae": 0.03568307986573284,
+      "pinball_avg": 0.022613846644288806,
+      "coverage_p10_p90": 1.0,
+      "late_rate_p90": 0.0,
+      "late_rate_p50": 0.4960776989166978,
+      "width_p10_p90": 0.5
+    }
+  },
+  "chute_stage_note": "Simulatorde sut->bant suresi tam olarak mesafe/hiz (+%3 gurultu) ile uretilir; fizik formulunun burada ustun cikmasi bu yuzden beklenendir ve gercek donanim hakkinda kanit degildir.",
+  "seeds_shift_p50_mae_min": [
+    1.7685393244649337,
+    1.761151959222197,
+    1.7685335940863196,
+    1.762529302003603,
+    1.7625588544559614
+  ]
+}

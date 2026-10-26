@@ -17,7 +17,7 @@ public class MlEtaWindowTests
     {
         var w = MlEtaWindow.Build(Ctx(), Forecast, OnBlock.AddMinutes(-30))!;
 
-        Assert.Equal("ML", w.Basis);
+        Assert.Equal("ML_FLIGHT", w.Basis);
         Assert.Equal(OnBlock.AddMinutes(10), w.P10Utc);
         Assert.Equal(OnBlock.AddMinutes(16.5), w.P50Utc);
         Assert.Equal(OnBlock.AddMinutes(28), w.P90Utc);
@@ -53,5 +53,36 @@ public class MlEtaWindowTests
     public void Invalid_context_is_rejected(string id, int bags, string handler)
     {
         Assert.NotNull(Ctx(id, bags, handler).Validate());
+    }
+
+    [Fact]
+    public void Bag_window_counts_from_the_unload_event_and_stays_ordered()
+    {
+        var w = MlEtaWindow.BuildForBag(OnBlock, new BagDurationForecast(240, 330, 480));
+        Assert.Equal("ML", w.Basis);
+        Assert.Equal(OnBlock.AddSeconds(240), w.P10Utc);
+        Assert.Equal(OnBlock.AddSeconds(330), w.P50Utc);
+        Assert.Equal(OnBlock.AddSeconds(480), w.P90Utc);
+
+        var odd = MlEtaWindow.BuildForBag(OnBlock, new BagDurationForecast(300, 200, 100));
+        Assert.True(odd.P10Utc <= odd.P50Utc && odd.P50Utc <= odd.P90Utc);
+    }
+
+    [Fact]
+    public void Physics_window_is_distance_over_speed_plus_minus_tolerance()
+    {
+        var ctx = Ctx() with { ChuteM = 48, SpeedMps = 0.55 };   // ≈ 87,3 sn
+        var w = PhysicsEtaWindow.Build(OnBlock, ctx);
+        Assert.Equal("PHYSICS", w.Basis);
+        Assert.Equal(48 / 0.55, (w.P50Utc - OnBlock).TotalSeconds, 3);
+        Assert.Equal(PhysicsEtaWindow.ToleranceSeconds, (w.P90Utc - w.P50Utc).TotalSeconds, 3);
+        Assert.Equal(PhysicsEtaWindow.ToleranceSeconds, (w.P50Utc - w.P10Utc).TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void Physics_window_never_starts_before_the_chute_scan()
+    {
+        var w = PhysicsEtaWindow.Build(OnBlock, Ctx() with { ChuteM = 5, SpeedMps = 1 });   // 5 sn < tolerans
+        Assert.True(w.P10Utc >= OnBlock);
     }
 }

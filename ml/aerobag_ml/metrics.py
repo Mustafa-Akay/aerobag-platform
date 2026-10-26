@@ -17,3 +17,8 @@ def report(y, pred):
         "late_rate_p50": float(np.mean(y > mid)),                     # hedef ~0.50
         "width_p10_p90": float(np.mean(hi - lo)),
     }
+
+
+def report_minutes(y_seconds, pred_seconds):
+    """Saniye cinsinden tahminleri dakika olarak raporlar."""
+    return report(np.asarray(y_seconds) / 60, {q: np.asarray(v) / 60 for q, v in pred_seconds.items()})

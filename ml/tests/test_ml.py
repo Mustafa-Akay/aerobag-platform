@@ -44,3 +44,20 @@ def test_recalibration_fixes_a_constant_shift():
     before = report(shifted, p)["p50_mae"]
     after = report(shifted, rolling_recalibrate(shifted, p))["p50_mae"]
     assert after < before / 2
+
+
+def test_completed_bag_recalibration_uses_only_bags_finished_before_the_prediction():
+    from aerobag_ml.adapt import completed_bag_recalibrate
+    n = 200
+    unload = np.arange(n) * 10.0
+    carousel = unload + 300
+    y = carousel - unload                       # 300 sn
+    pred = {0.1: np.full(n, 200.0), 0.5: np.full(n, 250.0), 0.9: np.full(n, 350.0)}
+    a = completed_bag_recalibrate(y, pred, unload, carousel, window=50, min_n=10)
+    y2 = y.copy(); y2[100] += 5000              # tek bir bavulun gercek suresi bozulur
+    b = completed_bag_recalibrate(y2, pred, unload, carousel, window=50, min_n=10)
+    # bozulan bavul, kendisi banta gelene (unload[100]+300 = indirme sirasi 130) kadar hicbir tahmini etkilememeli
+    for q in a:
+        assert np.allclose(a[q][:130], b[q][:130])
+    # duzeltme calisiyor: sabit 50 sn'lik sapma kapandi
+    assert abs(a[0.5][150] - 300) < 1

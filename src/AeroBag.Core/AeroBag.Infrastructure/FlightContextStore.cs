@@ -83,6 +83,52 @@ public sealed class FlightContextStore(NpgsqlDataSource db)
         return list;
     }
 
+    /// <summary>
+    /// Banta gelmiş ve henüz ML servisine bildirilmemiş bavullar (en eski bant gelişinden başlayarak).
+    /// Süre, olay günlüğündeki indirme ve bant olaylarından hesaplanır (eğitimdeki hedefle aynı tanım).
+    /// </summary>
+    public async Task<List<(Guid BagId, BagOutcome Outcome)>> PendingBagOutcomesAsync(int limit, CancellationToken ct = default)
+    {
+        await using var cmd = db.CreateCommand(
+            """
+            SELECT b.bag_id, c.flight_id, c.on_block_utc, c.wide, c.rain, c.bags, c.stand_m, c.chute_m, c.speed_mps, c.arrivals_30, c.handler,
+                   extract(epoch FROM (car.t - unl.t))::double precision
+            FROM bags b
+            JOIN flight_context c ON c.flight_id = b.flight_id
+            JOIN LATERAL (
+                SELECT min(e.occurred_at_utc) AS t FROM baggage_events e
+                WHERE e.bag_id = b.bag_id AND e.to_state = 'UNLOADED_AT_ARRIVAL' AND e.outcome <> 'IGNORED_STALE'
+            ) unl ON unl.t IS NOT NULL
+            JOIN LATERAL (
+                SELECT min(e.occurred_at_utc) AS t FROM baggage_events e
+                WHERE e.bag_id = b.bag_id AND e.to_state = 'ON_CAROUSEL' AND e.outcome <> 'IGNORED_STALE'
+            ) car ON car.t IS NOT NULL
+            WHERE car.t > unl.t
+              AND NOT EXISTS (SELECT 1 FROM ml_bag_outcomes r WHERE r.bag_id = b.bag_id)
+            ORDER BY car.t
+            LIMIT @n
+            """);
+        cmd.Parameters.Add(new NpgsqlParameter("n", NpgsqlDbType.Integer) { Value = limit });
+        var list = new List<(Guid, BagOutcome)>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var c = new FlightContext(r.GetString(1), r.GetFieldValue<DateTimeOffset>(2), r.GetBoolean(3), r.GetBoolean(4),
+                r.GetInt32(5), r.GetDouble(6), r.GetDouble(7), r.GetDouble(8), r.GetInt32(9), r.GetString(10));
+            list.Add((r.GetGuid(0), new BagOutcome(c, r.GetDouble(11))));
+        }
+        return list;
+    }
+
+    public async Task MarkBagOutcomesReportedAsync(IReadOnlyCollection<Guid> bagIds, CancellationToken ct = default)
+    {
+        if (bagIds.Count == 0) return;
+        await using var cmd = db.CreateCommand(
+            "INSERT INTO ml_bag_outcomes (bag_id) SELECT unnest(@ids) ON CONFLICT (bag_id) DO NOTHING");
+        cmd.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = bagIds.ToArray() });
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task MarkReportedAsync(string flightId, CancellationToken ct = default)
     {
         await using var cmd = db.CreateCommand("UPDATE flight_context SET outcome_reported = TRUE WHERE flight_id = @id");

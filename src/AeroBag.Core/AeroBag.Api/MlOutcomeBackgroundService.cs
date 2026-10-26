@@ -12,6 +12,34 @@ public sealed class MlOutcomeBackgroundService(
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(5);
 
+    private const int BagBatch = 200;
+
+    /// <summary>Banta gelmiş bavulların gerçek sürelerini bildirir. Servis kabul edemeyecek sürelerdekiler (>2 saat) gönderilmeden kapatılır.</summary>
+    private async Task ReportBagOutcomesAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            var pending = await store.PendingBagOutcomesAsync(BagBatch, ct);
+            if (pending.Count == 0)
+            {
+                return;
+            }
+
+            var valid = pending.Where(p => p.Outcome.DurationSec is > 0 and <= 7200).ToList();
+            var recorded = await ml.ReportBagOutcomesAsync(valid.Select(p => p.Outcome).ToList(), ct);
+            if (recorded < 0)
+            {
+                return; // servis cevap vermedi: işaretleme, sonraki turda yeniden dene
+            }
+
+            await store.MarkBagOutcomesReportedAsync(pending.Select(p => p.BagId).ToList(), ct);
+            if (pending.Count < BagBatch)
+            {
+                return;
+            }
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (ml is NullMlPredictor)
@@ -23,6 +51,8 @@ public sealed class MlOutcomeBackgroundService(
         {
             try
             {
+                await ReportBagOutcomesAsync(stoppingToken);
+
                 foreach (var p in await store.PendingOutcomesAsync(stoppingToken))
                 {
                     // Tahmin önce istenir: servis, düzeltme hesabı için ham tahmini uçuş numarasıyla saklar.

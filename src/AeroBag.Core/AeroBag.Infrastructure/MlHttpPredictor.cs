@@ -15,7 +15,14 @@ public sealed class MlHttpPredictor(HttpClient http, TimeProvider clock) : IMlPr
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan FailureBackoff = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// Servis geçici olarak yanıt vermezse uçuş düzeyi tahmin için en son başarılı sonuç bu süre boyunca kullanılır.
+    /// Böylece kısa bir kesinti panoyu "Tahmin yok"a çevirmez. Bu süreden eskisi kullanılmaz.
+    /// </summary>
+    private static readonly TimeSpan StaleTtl = TimeSpan.FromMinutes(10);
+
     private readonly ConcurrentDictionary<string, (DateTimeOffset At, MlFlightForecast F)> _cache = new();
+    private readonly ConcurrentDictionary<string, (DateTimeOffset At, BagDurationForecast F)> _bagCache = new();
     private long _downUntilTicks;
 
     private bool InBackoff => clock.GetUtcNow().UtcTicks < Interlocked.Read(ref _downUntilTicks);
@@ -29,7 +36,8 @@ public sealed class MlHttpPredictor(HttpClient http, TimeProvider clock) : IMlPr
         {
             return hit.F;
         }
-        if (InBackoff) return null;
+        MlFlightForecast? Stale() => hit.F is not null && now - hit.At < StaleTtl ? hit.F : null;
+        if (InBackoff) return Stale();
 
         try
         {
@@ -39,7 +47,7 @@ public sealed class MlHttpPredictor(HttpClient http, TimeProvider clock) : IMlPr
                 stand_m = c.StandM, chute_m = c.ChuteM, speed = c.SpeedMps, arrivals_30 = c.Arrivals30, handler = c.Handler,
             };
             using var resp = await http.PostAsJsonAsync("/v1/predict", body, ct);
-            if (!resp.IsSuccessStatusCode) { Fail(); return null; }
+            if (!resp.IsSuccessStatusCode) { Fail(); return Stale(); }
 
             using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
             var m = doc.RootElement.GetProperty("minutes_from_on_block");
@@ -55,7 +63,58 @@ public sealed class MlHttpPredictor(HttpClient http, TimeProvider clock) : IMlPr
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
         {
             Fail();
+            return Stale();
+        }
+    }
+
+    private static object Features(FlightContext c) => new
+    {
+        wide = c.Wide ? 1 : 0, rain = c.Rain ? 1 : 0, bags = c.Bags, stand_m = c.StandM, chute_m = c.ChuteM,
+        speed = c.SpeedMps, arrivals_30 = c.Arrivals30, handler = c.Handler,
+    };
+
+    public async Task<BagDurationForecast?> PredictBagAsync(FlightContext c, CancellationToken ct = default)
+    {
+        var now = clock.GetUtcNow();
+        if (_bagCache.TryGetValue(c.FlightId, out var hit) && now - hit.At < CacheTtl)
+        {
+            return hit.F;
+        }
+        if (InBackoff) return null;
+
+        try
+        {
+            using var resp = await http.PostAsJsonAsync("/v1/predict-bag", Features(c), ct);
+            if (!resp.IsSuccessStatusCode) { Fail(); return null; }
+
+            using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+            var e = doc.RootElement.GetProperty("seconds_after_unload");
+            var forecast = new BagDurationForecast(
+                e.GetProperty("p10").GetDouble(), e.GetProperty("p50").GetDouble(), e.GetProperty("p90").GetDouble());
+            _bagCache[c.FlightId] = (now, forecast);
+            return forecast;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            Fail();
             return null;
+        }
+    }
+
+    public async Task<int> ReportBagOutcomesAsync(IReadOnlyList<BagOutcome> items, CancellationToken ct = default)
+    {
+        if (items.Count == 0) return 0;
+        try
+        {
+            var body = new { items = items.Select(i => new { features = Features(i.Context), duration_s = i.DurationSec }).ToArray() };
+            using var resp = await http.PostAsJsonAsync("/v1/outcome-bags", body, ct);
+            if (!resp.IsSuccessStatusCode) return -1;
+            using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+            return doc.RootElement.GetProperty("recorded").GetInt32();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            return -1;
         }
     }
 

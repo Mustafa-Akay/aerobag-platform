@@ -1,6 +1,15 @@
 import type { EtaView } from "../api";
 import { minutesText } from "../format";
 
+const BASIS_NOTE: Record<EtaView["basis"], string> = {
+  ML: "Bu tahmin, uçuşun özelliklerine (gövde tipi, hava, mesafe, bavul sayısı) bakan ve son bavulların gerçek sürelerine göre kendini güncelleyen bir makine öğrenmesi modelinden geliyor.",
+  ML_FLIGHT:
+    "Bu tahmin, uçuşun özelliklerine bakan bir makine öğrenmesi modelinden geliyor. Uçuştaki ilk bavuldan sonuncuya kadar olan aralığı kapsar; bavulunuzun sırası bilinmediği için geniştir.",
+  PHYSICS: "Bu tahmin, şuttan banta olan mesafe ve bant hızından hesaplandı; yaklaşık 15 saniyelik bir pay içerir.",
+  HISTORY: "Bu tahmin, simülasyondaki geçmiş uçuşların gerçekleşen sürelerinden hesaplandı.",
+  FALLBACK: "Yeterli geçmiş veri yok; tahmin varsayılan bir aralığa dayanıyor ve geniş olabilir.",
+};
+
 export function EtaBand({ eta }: { eta: EtaView }) {
   const early = minutesText(eta.p10SecondsFromNow);
   const late = minutesText(eta.p90SecondsFromNow);
@@ -27,11 +36,7 @@ export function EtaBand({ eta }: { eta: EtaView }) {
       </div>
 
       <p className="mt-3 text-xs text-steel">
-        {eta.basis === "ML"
-          ? "Bu tahmin, uçuşun özelliklerine (gövde tipi, hava, mesafe, bavul sayısı) bakan bir makine öğrenmesi modelinden geliyor. Uçuştaki ilk bavuldan sonuncuya kadar olan aralığı kapsar; bavulunuzun sırası bilinmediği için geniştir."
-          : eta.basis === "HISTORY"
-            ? "Bu tahmin, simülasyondaki geçmiş uçuşların gerçekleşen sürelerinden hesaplandı."
-            : "Yeterli geçmiş veri yok; tahmin varsayılan bir aralığa dayanıyor ve geniş olabilir."}
+        {BASIS_NOTE[eta.basis]}
       </p>
     </section>
   );

@@ -2,7 +2,15 @@
 
 `ARCHITECTURE.md` hedef tasarımı anlatır. Bu belge, **şu an çalışan kodun** tasarımdan nerede ayrıştığını ve neyin henüz olmadığını açıkça listeler. Çelişki olursa bu belge koda daha yakındır.
 
-Son güncelleme: 24 Ekim 2026. Kapsam: Faz 1 (simülasyon verisiyle uçtan uca).
+Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, ölçütü karşılandı) tamam; Faz 4'ün ilk dilimi (çıkış okuması ve süre dolumu) tamam. Faz numaraları `ARCHITECTURE.md` bölüm 1.1'dekidir.
+
+| Faz (ARCHITECTURE.md) | Durum |
+|---|---|
+| 1. Çekirdek | Tamam |
+| 2. Makine öğrenmesi | Tamam (bkz. aşağıda ve `EVALUATION.md`) |
+| 3. Dayanıklılık | Ölçüt karşılandı; Kafka uyumlu broker yok (bkz. "Faz 3 durumu") |
+| 4. Güvenlik ve çıkış doğrulama | Başladı: çıkış okuması ve süre dolumu var; PNR eşleştirme, tehdit modeli, KVKK notu, kimlik doğrulama yok |
+| 5. Opsiyonel donanım demosu | Başlanmadı |
 
 ## Çalışan parçalar
 
@@ -32,13 +40,13 @@ Son güncelleme: 24 Ekim 2026. Kapsam: Faz 1 (simülasyon verisiyle uçtan uca).
 ## Bilinen eksikler ve riskler
 
 1. **Kimlik doğrulama yok:** `/v1/events`, `/v1/flights` ve `/hubs/live` herkese açık. Yalnızca yerel demo için uygundur. Hub'da bagaj etiketini bilen o bagajın "değişti" sinyalini alabilir (içerik görmez). Faz 4.
-2. **Çıkış doğrulama yok.** `exit_deadlines` satırları yazılıyor ama hiçbir mesaj `EXIT_CLEARED` üretemiyor (mapper'da eşleme yok, simülatör göndermiyor) ve süre dolunca durumu değiştiren worker yok. Panodaki "Alındı" sayacı yalnızca `CLAIMED_FROM_BELT` sayar. Faz 3.
+2. **Çıkışta yolcu eşleştirmesi yok.** Çıkış okuması ve süre dolumu çalışıyor (aşağıda "Faz 4, ilk dilim"), ama bavul ile sunulan PNR karşılaştırılmıyor; yanlış kişi kontrolü (`EXIT_REVIEW`) yok. Faz 4.
 3. **Bantta takılı bagaj tespiti yok.** "Alındı" mesajı düşerse bagaj sonsuza dek `ON_CAROUSEL` kalır; çıkış süresi bunu çözmez çünkü sayaç alınma anında başlar.
-4. **AODB bağlamı alınmıyor:** uçak tipi, park mesafesi, hava durumu, bant yok. ML aşamasından (Faz 2) önce gerekir.
-5. **ETA taban çizgisi ölçülmedi.** Doğruluk, kapsama ve rejim kayması değerlendirmesi Faz 2'dir.
+4. **AODB bağlamı simülatörden gelir:** gövde tipi, hava, mesafeler ve yer hizmeti firması `POST /v1/flights/context` ile verilir; gerçek bir uçuş bilgi sistemi yok. Bant numarası hâlâ saklanmıyor.
+5. **ML ölçümü yalnızca sentetik veride ve uçuş düzeyindedir.** Doğruluk, kapsama ve rejim kayması sonuçları `EVALUATION.md`'dedir; durum bazlı ampirik ETA (iniş sonrası) ayrıca ölçülmedi.
 6. **Doğrulama kapsamı:** sonuçlar yalnızca simülasyon verisiyle doğrulandı. Gerçek havalimanı verisi yoktur ve IATA BIX uyumluluğu iddia edilmez.
 7. **Bağımlılık uyarısı:** `SSH.NET` (Testcontainers üzerinden, yalnızca test projesinde) için NU1903 uyarısı var. Üretime girmez; Testcontainers güncellenince kalkması beklenir.
-8. **CI henüz bir GitHub deposunda çalıştırılmadı.** `.github/workflows/ci.yml` yazıldı, ilk koşu doğrulanmalıdır.
+8. **CI:** `dotnet`, `ui` ve `ml` işleri GitHub Actions'ta yeşil çalışıyor.
 
 ## Yerelde çalıştırma
 
@@ -66,7 +74,15 @@ Bilinen sınırlar:
 - ML servisinin düzeltme durumu tek örnek ve bellektedir.
 - Python testleri henüz CI'da çalışmıyor.
 
-## Faz 3: çıkış okuması ve çıkış süresi
+## Faz 3 durumu: dayanıklılık (ölçüt karşılandı, broker yok)
+
+`ARCHITECTURE.md` Faz 3 için DLQ, idempotent tüketici, Kafka uyumlu broker ve gerekirse Redis öngörür. Bitti ölçütü "çift gelen ve sırasız mesajlarda tutarlı durum"dur.
+
+- **Karşılananlar:** ölü mektup tablosu (`dead_letter_messages`), mesaj anahtarına dayalı idempotency (eş zamanlı kopyada bile tek kayıt), sırasız mesajda durumun geri gitmemesi (`IGNORED_STALE`), bagaj başına advisory lock, transactional outbox (en az bir kez, sıralı, 5 denemede bekletme). Hepsi entegrasyon testlidir.
+- **Yapılmayan: Kafka uyumlu broker.** Bilinçli sapma: olay iletimi Postgres outbox + SignalR ile yapılıyor. `ARCHITECTURE.md` zaten "ilk sürümde altyapı yükü olmadan aynı garanti" diyor. Tek makinede çalışan bu proje için broker kurmak ek işletme yükü getirirdi. Bedeli: outbox dağıtıcısı tek örnek varsayar ve birden çok tüketici grubunu desteklemez.
+- **Yapılmayan: Redis.** Plana göre "gerekirse" idi; ölçülmüş bir ihtiyaç çıkmadı.
+
+## Faz 4, ilk dilim: çıkış okuması ve çıkış süresi
 
 Çalışan parçalar:
 - **EXIT taraması:** BPM okuma noktası `EXIT01` gibi bir `EXIT` önekiyle gelirse bavul `EXIT_CLEARED` olur. Mevcut durum makinesi kuralları geçerlidir (monoton, banttan alınmadan gelirse sıra dışı sayılır).
@@ -78,7 +94,7 @@ Bilinen sınırlar:
 - Yolcuya çıkış durumları ayrıca gösterilmez; "banttan alındı" mesajı geçerli kalır.
 
 Tasarımdan farklar ve bilinen sınırlar:
-- **`EXIT_CLEARED` burada yalnızca "çıkışta okundu" demektir.** ARCHITECTURE.md'deki anlamı (etiket ve sunulan PNR eşleşti) bu aşamada uygulanmıyor. Yanlış kişi kontrolü (`EXIT_REVIEW`, sessiz inceleme kaydı) Faz 4'tedir ve çıkış kapısı sensöründen sunulan PNR'ı gerektirir.
+- **`EXIT_CLEARED` burada yalnızca "çıkışta okundu" demektir.** ARCHITECTURE.md'deki anlamı (etiket ve sunulan PNR eşleşti) bu aşamada uygulanmıyor. Yanlış kişi kontrolü (`EXIT_REVIEW`, sessiz inceleme kaydı) Faz 4'ün kalanıdır ve çıkış kapısı sensöründen sunulan PNR'ı gerektirir; tehdit modeli ve KVKK notu da buna dahildir.
 - **"Şimdi" sanal saattir:** worker, BSM olmayan olayların en son zamanını kullanır (yolcu ETA'sı ve takılı bavul sayacıyla aynı kabul). Olay akışı durursa saat de durur ve süre dolumları o zamana kadar işlenmez. Örneğin son uçuşun son bavulları, ardından başka olay gelmezse "çıkış okunmadı" olmaz. Gerçek kurulumda gerçek saat kullanılmalıdır.
 - Worker ile aynı anda gelen bir çıkış okuması için bavul satırında açık bir kilit yok; sonuç her iki sırada da `EXIT_CLEARED` olur, ama arada fazladan bir `EXIT_OVERDUE` olayı yazılmış olabilir.
 - Çıkış süresi sabit 180 sn (`BaggageEventProcessor.ExitDeadline`), yapılandırılabilir değil.

@@ -20,7 +20,8 @@ Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, �
 | Type B ayrıştırıcı (BSM/BUM/BPM, sıkı sınırlar) | Çalışıyor, birim testli |
 | Olay işleme (idempotent, bagaj başına advisory lock, dead-letter) | Çalışıyor, entegrasyon testli |
 | Yolcu sorgusu (PNR + soyad, HMAC, tekdüze 404, IP başına 20/dk) | Çalışıyor |
-| ETA tahmini (deneysel P10/P50/P90) | Çalışıyor, canlı doğrulandı |
+| ETA tahmini (P10/P50/P90): ML_FLIGHT, ML, PHYSICS, HISTORY, FALLBACK | Çalışıyor, canlı doğrulandı (PHYSICS ekranda yakalanmadı) |
+| SLA ve gecikme riski (`/v1/flights/sla`, DEMO hedefleri) | Çalışıyor, canlı doğrulandı; olasılıkların kalibrasyonu ölçülmedi |
 | Operasyon panosu API'si ve arayüzü | Çalışıyor |
 | Outbox → SignalR canlı bildirim | Çalışıyor, entegrasyon testli |
 | React arayüzü (yolcu sayfası, operasyon panosu) | Çalışıyor |
@@ -30,7 +31,7 @@ Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, �
 
 - **BPM okuma noktası kuralı.** Biçim `[A-Z]{3,10}\d{2}` (iki rakam şart). Önek durumu belirler: `SEC` güvenlik, `LOAD` uçağa yükleme, `CHUTE` şut, `CAROUSEL` bant ağzı, `CLAIM` banttan alma. Bilinmeyen önek reddedilir.
 - **Olay zamanı.** BSM'nin zamanı mesajda yoktur, alınma anı kullanılır. BUM ve BPM zamanı mesajdan gelir.
-- **ETA tabanı.** Olay geçmişinden `percentile_cont` ile hesaplanır. En az 20 örnek varsa `HISTORY`, yoksa sabit varsayılanlar (`FALLBACK`: iniş→bant 300/540/900 sn, şut→bant 60/90/150 sn). ETA yalnızca bagaj indirildikten sonra verilir.
+- **ETA tabanı.** Olay geçmişinden `percentile_cont` ile hesaplanır. En az 20 örnek varsa `HISTORY`, yoksa sabit varsayılanlar (`FALLBACK`: iniş→bant 300/540/900 sn, şut→bant 60/90/150 sn). ML kapalı ya da bağlam yokken ETA yalnızca bagaj indirildikten sonra verilir; ML açıkken indirme öncesinde de aralık gösterilir.
 - **Referans an (`asOfUtc`).** Simülasyonda "şimdi", BSM olmayan olayların en son zamanıdır (sanal saat). Gerçek kurulumda gerçek saat olmalıdır.
 - **Yolcu verisi.** Ad, soyad ve PNR düz metin saklanmaz; yalnızca `HMAC-SHA256(gizli anahtar, PNR|soyad)` arama anahtarı tutulur. Geliştirme varsayılan anahtarı kodda durur; gerçek kurulumda `Security__LookupKeySecret` verilmelidir.
 - **Bant numarası** saklanmıyor, arayüzde gösterilmiyor (AODB bağlamı yok).
@@ -43,7 +44,7 @@ Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, �
 2. **Çıkışta yolcu eşleştirmesi yok.** Çıkış okuması ve süre dolumu çalışıyor (aşağıda "Faz 4, ilk dilim"), ama bavul ile sunulan PNR karşılaştırılmıyor; yanlış kişi kontrolü (`EXIT_REVIEW`) yok. Faz 4.
 3. **Bantta takılı bagaj tespiti yok.** "Alındı" mesajı düşerse bagaj sonsuza dek `ON_CAROUSEL` kalır; çıkış süresi bunu çözmez çünkü sayaç alınma anında başlar.
 4. **AODB bağlamı simülatörden gelir:** gövde tipi, hava, mesafeler ve yer hizmeti firması `POST /v1/flights/context` ile verilir; gerçek bir uçuş bilgi sistemi yok. Bant numarası hâlâ saklanmıyor.
-5. **ML ölçümü yalnızca sentetik veride ve uçuş düzeyindedir.** Doğruluk, kapsama ve rejim kayması sonuçları `EVALUATION.md`'dedir; durum bazlı ampirik ETA (iniş sonrası) ayrıca ölçülmedi.
+5. **ML ölçümü yalnızca sentetik veride yapıldı.** Uçuş düzeyi ve bavul düzeyi (indirme→bant) sonuçları, rejim kayması ve fizik karşılaştırması `EVALUATION.md`'dedir. Bavul düzeyi modelin kazancı ortak uçuş etkisinden gelir; bavula özgü özellikler katkı sağlamadı. Fizik sonucu dairesel, canlı olarak ekranda yakalanmadı.
 6. **Doğrulama kapsamı:** sonuçlar yalnızca simülasyon verisiyle doğrulandı. Gerçek havalimanı verisi yoktur ve IATA BIX uyumluluğu iddia edilmez.
 7. **Bağımlılık uyarısı:** `SSH.NET` (Testcontainers üzerinden, yalnızca test projesinde) için NU1903 uyarısı var. Üretime girmez; Testcontainers güncellenince kalkması beklenir.
 8. **CI:** `dotnet`, `ui` ve `ml` işleri GitHub Actions'ta yeşil çalışıyor.
@@ -66,13 +67,12 @@ dotnet test                                            # Docker açık olmalı
 - **Simülatör gerçekçiliği:** gizli ekip hızı, geç gelen ekipman, araba beklemesi, gözlenebilir yer hizmeti firması (`FlightGenerator.cs`). Gürültü parametreleri demo varsayımıdır.
 - **`ml/` Python paketi:** uçuş düzeyinde veri, medyan baseline, kuantil LightGBM, rejim A→B kayma testi, özellik çıkarma deneyi, canlı artık düzeltmesi. Sonuçlar ve sınırlar: `docs/EVALUATION.md`.
 - **ML servisi (`ml/service`, FastAPI):** `POST /v1/predict`, `POST /v1/outcome`, `GET /health`. Modeller `ml/models/` altında düz metin dosyalardır (pickle yok). Düzeltme durumu bellektedir; yeniden başlayınca sıfırlanır. Kimlik doğrulama yok, yalnızca `127.0.0.1`.
-- **.NET entegrasyonu:** `POST /v1/flights/context` (AODB taklidi) uçuş bağlamını `flight_context` tablosuna yazar. İniş öncesi bavullar için yolcu sorgusu ML penceresini (`basis: "ML"`) döndürür. İniş sonrası bavullar eski, durum bazlı ampirik ETA'yı kullanır. Servis kapalı ya da bağlam yoksa ETA gösterilmez (eskisi gibi). Biten uçuşların gerçek süreleri `MlOutcomeBackgroundService` ile servise bildirilir.
+- **.NET entegrasyonu:** `POST /v1/flights/context` (AODB taklidi) uçuş bağlamını `flight_context` tablosuna yazar. Yolcu sorgusu duruma göre şunu verir: indirme öncesi uçuş düzeyi ML penceresi (`ML_FLIGHT`), indirildikten sonra bavul düzeyi ML (`ML`), şutta fizik (`PHYSICS`). Servis kapalı ya da bağlam yoksa indirme/şut durumlarında eski ampirik ETA'ya (`HISTORY`/`FALLBACK`) düşülür; indirme öncesinde tahmin gösterilmez. Biten uçuşların ve bavulların gerçek süreleri `MlOutcomeBackgroundService` ile servise bildirilir.
 
 Bilinen sınırlar:
 - Bavul düzeyindeki ML penceresi (ilk bavul P10 → son bavul P90, ortası P50) bir basitleştirmedir ve ayrıca ölçülmemiştir; değerlendirme uçuş düzeyindedir.
 - "Biten uçuş" sezgiseldir: bavulların %90'ı banda gelmiş ve sanal saatte 10 dk geçmiş. Kayıp mesajlar son bavulu erken gösterebilir.
 - ML servisinin düzeltme durumu tek örnek ve bellektedir.
-- Python testleri henüz CI'da çalışmıyor.
 
 ## Faz 3 durumu: dayanıklılık (ölçüt karşılandı, broker yok)
 
@@ -89,7 +89,7 @@ Bilinen sınırlar:
 - **Çıkış süresi:** banttan alınma olayından 180 sn sonra bekleyen bir kayıt (`exit_deadlines`) açılır. Süre, olayın kendi zamanına bağlıdır (alınma zamanı değil).
 - **Süre dolum worker'ı (`ExitDeadlineService`):** süresi dolan ve hâlâ `CLAIMED_FROM_BELT` olan bavulu `EXIT_OVERDUE` yapar. Durum, olay günlüğü kaydı (`message_type = SYSTEM`, tekil anahtar) ve outbox mesajı tek işlemde yazılır; kayıtlar `FOR UPDATE SKIP LOCKED` ile alınır. İkinci çalıştırma ikinci bir olay üretmez.
 - **`EXIT_OVERDUE` son durum değildir:** süre dolduktan sonra çıkış okunursa bavul `EXIT_CLEARED` olur.
-- **Simülatör:** `--mode live` çıkış taramaları da üretir (`--exit-scans false` ile kapatılır). Bavulların %2'si çıkışta hiç okunmaz, kalanı banttan alındıktan 30 sn + üstel gecikmeyle okunur. Çıkış taramaları ayrı bir rastgele akıştan gelir; CSV ve ML eğitim verisi değişmez.
+- **Simülatör:** `--mode live` çıkış taramalarını varsayılan olarak üretir (`--exit-scans false` ile kapatılır). Bavulların %2'si çıkışta hiç okunmaz, kalanı banttan alındıktan 30 sn + üstel gecikmeyle okunur. Çıkış taramaları ayrı bir rastgele akıştan gelir; CSV ve ML eğitim verisi değişmez.
 - **Operasyon panosu:** "Alındı" artık banttan alınan tüm bavulları sayar (çıkış durumları dahil). "Çıkış okundu" ve "Çıkış okunmadı" bunların alt kümeleridir.
 - Yolcuya çıkış durumları ayrıca gösterilmez; "banttan alındı" mesajı geçerli kalır.
 

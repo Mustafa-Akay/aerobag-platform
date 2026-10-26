@@ -2,7 +2,9 @@ const tr = "tr-TR";
 
 export function minutesText(seconds: number): string {
   const minutes = Math.round(seconds / 60);
-  return minutes < 1 ? "1 dakikadan az" : `${minutes} dk`;
+  if (minutes < 1) return "1 dakikadan az";
+  if (minutes < 120) return `${minutes} dk`;
+  return `${Math.floor(minutes / 60)} sa ${minutes % 60} dk`;
 }
 
 export function decimalMinutes(value: number): string {

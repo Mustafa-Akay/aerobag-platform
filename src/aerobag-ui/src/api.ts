@@ -5,7 +5,7 @@ export type EtaView = {
   p10SecondsFromNow: number;
   p50SecondsFromNow: number;
   p90SecondsFromNow: number;
-  basis: "HISTORY" | "FALLBACK";
+  basis: "HISTORY" | "FALLBACK" | "ML";
 };
 
 export type PassengerBag = {

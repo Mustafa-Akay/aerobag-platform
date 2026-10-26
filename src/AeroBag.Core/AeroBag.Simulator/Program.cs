@@ -69,6 +69,8 @@ if (mode == "live")
     var api = Get("api", "http://localhost:5080");
     var speed = GetDouble("speed", 60);
     var noise = new NoiseRates(GetDouble("dup-rate", 0.02), GetDouble("drop-rate", 0.01), GetDouble("corrupt-rate", 0.005));
+    var contexts = await ContextSender.SendAsync(api, flights.Select(f => f.Info), CancellationToken.None);
+    Console.WriteLine($"{contexts}/{flights.Count} uçuş bağlamı (AODB) gönderildi.");
     var messages = flights.SelectMany(f => f.Messages).OrderBy(m => m.TimeUtc).ToList();
     var paceFrom = flights.Min(f => f.Info.OnBlockUtc);
 

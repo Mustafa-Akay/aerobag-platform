@@ -89,3 +89,19 @@ CREATE TABLE dead_letter_messages (
   error           TEXT        NOT NULL,
   received_at_utc TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- AODB'den gelen uçuş bağlamı (ML tahmini için). Gerçek kurulumda uçuş bilgi sisteminden beslenir.
+CREATE TABLE flight_context (
+  flight_id        VARCHAR(40) PRIMARY KEY,
+  on_block_utc     TIMESTAMPTZ      NOT NULL,
+  wide             BOOLEAN          NOT NULL,
+  rain             BOOLEAN          NOT NULL,
+  bags             INT              NOT NULL,
+  stand_m          DOUBLE PRECISION NOT NULL,
+  chute_m          DOUBLE PRECISION NOT NULL,
+  speed_mps        DOUBLE PRECISION NOT NULL,
+  arrivals_30      INT              NOT NULL,
+  handler          VARCHAR(20)      NOT NULL,
+  outcome_reported BOOLEAN          NOT NULL DEFAULT FALSE,
+  received_at_utc  TIMESTAMPTZ      NOT NULL DEFAULT now()
+);

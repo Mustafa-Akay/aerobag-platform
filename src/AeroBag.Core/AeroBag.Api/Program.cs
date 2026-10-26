@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using AeroBag.Api;
+using AeroBag.Application.Ml;
 using AeroBag.Application.TypeB;
 using AeroBag.Infrastructure;
 using Npgsql;
@@ -20,8 +21,23 @@ builder.Services.AddSingleton(new LookupKeyHasher(Encoding.UTF8.GetBytes(lookupS
 builder.Services.AddSingleton<BaggageEventProcessor>();
 builder.Services.AddSingleton<BagQueries>();
 builder.Services.AddSingleton<EtaStatistics>();
+builder.Services.AddSingleton<FlightContextStore>();
 builder.Services.AddSingleton<PassengerQueries>();
 builder.Services.AddSingleton<OpsQueries>();
+
+// ML tahmin servisi (Faz 2). Ml:BaseUrl boşsa kapalıdır; servis erişilemezse sistem taban çizgisine düşer.
+var mlUrl = builder.Configuration["Ml:BaseUrl"] ?? "http://localhost:8000";
+if (string.IsNullOrWhiteSpace(mlUrl))
+{
+    builder.Services.AddSingleton<IMlPredictor, NullMlPredictor>();
+}
+else
+{
+    builder.Services.AddSingleton<IMlPredictor>(sp => new MlHttpPredictor(
+        new HttpClient { BaseAddress = new Uri(mlUrl), Timeout = TimeSpan.FromSeconds(2) },
+        sp.GetRequiredService<TimeProvider>()));
+}
+builder.Services.AddHostedService<MlOutcomeBackgroundService>();
 
 // Outbox -> SignalR: veritabanına yazılan olaylar arka planda içeriksiz canlı bildirimlere çevrilir.
 builder.Services.AddSingleton<OutboxRelay>();
@@ -92,6 +108,19 @@ app.MapGet("/v1/lookup", async (string? pnr, string? surname, PassengerQueries q
 
 // Operasyon panosu: uçuş bazında sayaçlar. (Kimlik doğrulama sonraki fazda eklenecek, şimdilik yalnızca yerel demo.)
 app.MapGet("/v1/flights", async (OpsQueries ops, CancellationToken ct) => Results.Ok(await ops.FlightsAsync(ct)));
+
+// AODB uçuş bağlamı beslemesi (ML tahmini için). Kimlik doğrulama sonraki fazda; şimdilik yalnızca yerel demo.
+app.MapPost("/v1/flights/context", async (FlightContext body, FlightContextStore store, CancellationToken ct) =>
+{
+    var error = body.Validate();
+    if (error is not null)
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    await store.UpsertAsync(body, ct);
+    return Results.Accepted();
+});
 
 app.MapHub<LiveHub>("/hubs/live");
 

@@ -51,3 +51,17 @@ dotnet test                                            # Docker açık olmalı
 ```
 
 Şema değişince veritabanı `docker compose down -v` ile sıfırlanır. Docker açıkken ve Postgres hazırken API'yi başlatın; hazır değilken gönderilen olaylar kaybolur ve sonraki olaylar "sıra dışı" görünür.
+
+## Faz 2: ML tahmini
+
+Çalışan parçalar:
+- **Simülatör gerçekçiliği:** gizli ekip hızı, geç gelen ekipman, araba beklemesi, gözlenebilir yer hizmeti firması (`FlightGenerator.cs`). Gürültü parametreleri demo varsayımıdır.
+- **`ml/` Python paketi:** uçuş düzeyinde veri, medyan baseline, kuantil LightGBM, rejim A→B kayma testi, özellik çıkarma deneyi, canlı artık düzeltmesi. Sonuçlar ve sınırlar: `docs/EVALUATION.md`.
+- **ML servisi (`ml/service`, FastAPI):** `POST /v1/predict`, `POST /v1/outcome`, `GET /health`. Modeller `ml/models/` altında düz metin dosyalardır (pickle yok). Düzeltme durumu bellektedir; yeniden başlayınca sıfırlanır. Kimlik doğrulama yok, yalnızca `127.0.0.1`.
+- **.NET entegrasyonu:** `POST /v1/flights/context` (AODB taklidi) uçuş bağlamını `flight_context` tablosuna yazar. İniş öncesi bavullar için yolcu sorgusu ML penceresini (`basis: "ML"`) döndürür. İniş sonrası bavullar eski, durum bazlı ampirik ETA'yı kullanır. Servis kapalı ya da bağlam yoksa ETA gösterilmez (eskisi gibi). Biten uçuşların gerçek süreleri `MlOutcomeBackgroundService` ile servise bildirilir.
+
+Bilinen sınırlar:
+- Bavul düzeyindeki ML penceresi (ilk bavul P10 → son bavul P90, ortası P50) bir basitleştirmedir ve ayrıca ölçülmemiştir; değerlendirme uçuş düzeyindedir.
+- "Biten uçuş" sezgiseldir: bavulların %90'ı banda gelmiş ve sanal saatte 10 dk geçmiş. Kayıp mesajlar son bavulu erken gösterebilir.
+- ML servisinin düzeltme durumu tek örnek ve bellektedir.
+- Python testleri henüz CI'da çalışmıyor.

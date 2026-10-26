@@ -27,9 +27,11 @@ export function EtaBand({ eta }: { eta: EtaView }) {
       </div>
 
       <p className="mt-3 text-xs text-steel">
-        {eta.basis === "HISTORY"
-          ? "Bu tahmin, simülasyondaki geçmiş uçuşların gerçekleşen sürelerinden hesaplandı."
-          : "Yeterli geçmiş veri yok; tahmin varsayılan bir aralığa dayanıyor ve geniş olabilir."}
+        {eta.basis === "ML"
+          ? "Bu tahmin, uçuşun özelliklerine (gövde tipi, hava, mesafe, bavul sayısı) bakan bir makine öğrenmesi modelinden geliyor. Uçuştaki ilk bavuldan sonuncuya kadar olan aralığı kapsar; bavulunuzun sırası bilinmediği için geniştir."
+          : eta.basis === "HISTORY"
+            ? "Bu tahmin, simülasyondaki geçmiş uçuşların gerçekleşen sürelerinden hesaplandı."
+            : "Yeterli geçmiş veri yok; tahmin varsayılan bir aralığa dayanıyor ve geniş olabilir."}
       </p>
     </section>
   );

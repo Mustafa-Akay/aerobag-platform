@@ -1,4 +1,6 @@
 using AeroBag.Application.Eta;
+using AeroBag.Application.Ml;
+using AeroBag.Domain;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -17,7 +19,8 @@ public sealed record PassengerBagView(string BagTag, string FlightId, string Sta
 public sealed record LookupResult(DateTimeOffset AsOfUtc, IReadOnlyList<PassengerBagView> Bags);
 
 public sealed class PassengerQueries(
-    NpgsqlDataSource db, LookupKeyHasher hasher, EtaStatistics stats, TimeProvider clock)
+    NpgsqlDataSource db, LookupKeyHasher hasher, EtaStatistics stats, TimeProvider clock,
+    IMlPredictor? ml = null, FlightContextStore? contexts = null)
 {
     private record Row(string Tag, string Flight, string State, DateTimeOffset? LastEvent);
 
@@ -57,12 +60,36 @@ public sealed class PassengerQueries(
         var unloadToCarousel = await stats.UnloadToCarouselAsync(ct);
         var chuteToCarousel = await stats.ChuteToCarouselAsync(ct);
 
+        // İniş öncesi bavullar için ampirik ETA yoktur; uçuş bağlamı ve ML servisi varsa uçuş düzeyinde tahmin kullanılır.
+        // Servis kapalıysa ya da bağlam yoksa eskisi gibi ETA gösterilmez (taban çizgisine düşüş).
+        var mlByFlight = new Dictionary<string, EtaWindow?>();
+        if (ml is not null && contexts is not null)
+        {
+            var preFlights = rows
+                .Where(r => (int)StateNames.FromDb(r.State)!.Value < (int)BagState.UnloadedAtArrival)
+                .Select(r => r.Flight).Distinct().ToList();
+            var ctxs = await contexts.GetAsync(preFlights, ct);
+            foreach (var flightId in preFlights)
+            {
+                EtaWindow? w = null;
+                if (ctxs.TryGetValue(flightId, out var c) && await ml.PredictAsync(c, ct) is { } forecast)
+                {
+                    w = MlEtaWindow.Build(c, forecast, asOf);
+                }
+                mlByFlight[flightId] = w;
+            }
+        }
+
         var bags = rows.Select(row =>
         {
             var state = StateNames.FromDb(row.State)!.Value;
             var window = row.LastEvent is { } last
                 ? EtaEstimator.Estimate(state, last, unloadToCarousel, chuteToCarousel)
                 : null;
+            if (window is null && mlByFlight.TryGetValue(row.Flight, out var mlWindow))
+            {
+                window = mlWindow;
+            }
             return new PassengerBagView(row.Tag, row.Flight, row.State, window is null ? null : ToView(window, asOf));
         }).ToList();
 

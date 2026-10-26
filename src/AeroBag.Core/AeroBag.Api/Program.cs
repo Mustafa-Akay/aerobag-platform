@@ -38,6 +38,8 @@ else
         sp.GetRequiredService<TimeProvider>()));
 }
 builder.Services.AddHostedService<MlOutcomeBackgroundService>();
+builder.Services.AddSingleton<ExitDeadlineService>();
+builder.Services.AddHostedService<ExitDeadlineBackgroundService>();
 
 // Outbox -> SignalR: veritabanına yazılan olaylar arka planda içeriksiz canlı bildirimlere çevrilir.
 builder.Services.AddSingleton<OutboxRelay>();

@@ -27,6 +27,8 @@ export type FlightSummary = {
   inbound: number;
   onCarousel: number;
   claimed: number;
+  exitRead: number;
+  exitOverdue: number;
   anomalies: number;
   firstUnloadUtc: string | null;
   firstCarouselUtc: string | null;

@@ -39,7 +39,7 @@ export function OpsPage() {
   return (
     <div>
       <h1 className="font-display text-5xl font-bold leading-[0.95]">Operasyon panosu</h1>
-      <p className="mt-2 text-steel">Uçuş başına bagaj sayıları, ilk bagaj süresi ve sıra dışı olaylar.</p>
+      <p className="mt-2 text-steel">Uçuş başına bagaj sayıları, ilk bagaj süresi ve sıra dışı olaylar. "Alındı" banttan alınan tüm bagajları sayar; çıkış sütunları bunların alt kümesidir. "Çıkış okunmadı" bir sonuç değil, inceleme gerektiren durumdur.</p>
 
       {error && (
         <p role="alert" className="mt-4 border-l-4 border-alert bg-tag p-3 text-sm text-alert">
@@ -51,7 +51,7 @@ export function OpsPage() {
 
       {flights && flights.length > 0 && (
         <div className="mt-6 overflow-x-auto bg-ink p-1">
-          <table className="w-full min-w-[40rem] border-collapse text-left text-tag">
+          <table className="w-full min-w-[52rem] border-collapse text-left text-tag">
             <caption className="sr-only">Uçuş özetleri</caption>
             <thead>
               <tr className="text-sm text-signal">
@@ -61,6 +61,8 @@ export function OpsPage() {
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Yolda</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Bantta</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Alındı</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Çıkış okundu</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Çıkış okunmadı</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Sıra dışı</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">İlk bagaj (dk)</th>
               </tr>
@@ -74,6 +76,8 @@ export function OpsPage() {
                   <td className="px-3 py-2 text-right">{f.inbound}</td>
                   <td className="px-3 py-2 text-right">{f.onCarousel}</td>
                   <td className="px-3 py-2 text-right">{f.claimed}</td>
+                  <td className="px-3 py-2 text-right">{f.exitRead}</td>
+                  <td className={["px-3 py-2 text-right", f.exitOverdue > 0 ? "font-bold text-signal" : ""].join(" ")}>{f.exitOverdue}</td>
                   <td className={["px-3 py-2 text-right", f.anomalies > 0 ? "font-bold text-signal" : ""].join(" ")}>{f.anomalies}</td>
                   <td className="px-3 py-2 text-right">{f.firstBagMinutes === null ? "–" : decimalMinutes(f.firstBagMinutes)}</td>
                 </tr>

@@ -24,7 +24,8 @@ public static class BaggageEventMapper
 {
     /// <summary>
     /// BPM okuma noktası önekinden durum çıkarılır:
-    /// SEC=güvenlik, LOAD=uçağa yükleme, CHUTE=şut girişi, CAROUSEL=bant ağzı, CLAIM=banttan alma.
+    /// SEC=güvenlik, LOAD=uçağa yükleme, CHUTE=şut girişi, CAROUSEL=bant ağzı, CLAIM=banttan alma,
+    /// EXIT=çıkış kapısında okuma. EXIT yalnızca "çıkışta okundu" bilgisidir; yolcu eşleştirmesi (PNR) yapılmaz (Faz 4).
     /// </summary>
     public static bool TryMap(TypeBMessage m, DateTimeOffset receivedAtUtc, out BaggageEvent? result, out string? error)
     {
@@ -50,6 +51,7 @@ public static class BaggageEventMapper
                 else if (point.StartsWith("CHUTE", StringComparison.Ordinal)) state = BagState.InboundChute;
                 else if (point.StartsWith("CAROUSEL", StringComparison.Ordinal)) state = BagState.OnCarousel;
                 else if (point.StartsWith("CLAIM", StringComparison.Ordinal)) state = BagState.ClaimedFromBelt;
+                else if (point.StartsWith("EXIT", StringComparison.Ordinal)) state = BagState.ExitCleared;
                 else
                 {
                     error = $"Bilinmeyen okuma noktası: {point}";

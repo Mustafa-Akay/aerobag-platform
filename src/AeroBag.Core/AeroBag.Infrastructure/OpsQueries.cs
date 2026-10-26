@@ -14,7 +14,9 @@ public sealed record FlightSummary(
     DateTimeOffset? FirstCarouselUtc,
     DateTimeOffset? LastCarouselUtc,
     double? FirstBagMinutes,
-    int Stalled);
+    int Stalled,
+    int ExitRead,
+    int ExitOverdue);
 
 public sealed class OpsQueries(NpgsqlDataSource db)
 {
@@ -81,7 +83,9 @@ public sealed class OpsQueries(NpgsqlDataSource db)
                    (count(*) FILTER (WHERE current_state IN ('CHECKED_IN','SECURITY_SCREENED','LOADED_ON_AIRCRAFT')))::int,
                    (count(*) FILTER (WHERE current_state IN ('UNLOADED_AT_ARRIVAL','INBOUND_CHUTE')))::int,
                    (count(*) FILTER (WHERE current_state = 'ON_CAROUSEL'))::int,
-                   (count(*) FILTER (WHERE current_state = 'CLAIMED_FROM_BELT'))::int
+                   (count(*) FILTER (WHERE current_state IN ('CLAIMED_FROM_BELT','EXIT_OVERDUE','EXIT_CLEARED','EXIT_REVIEW')))::int,
+                   (count(*) FILTER (WHERE current_state = 'EXIT_CLEARED'))::int,
+                   (count(*) FILTER (WHERE current_state = 'EXIT_OVERDUE'))::int
             FROM bags
             GROUP BY flight_id
             ORDER BY flight_id
@@ -97,7 +101,7 @@ public sealed class OpsQueries(NpgsqlDataSource db)
                     : null;
                 result.Add(new FlightSummary(id, r.GetInt32(1), r.GetInt32(2), r.GetInt32(3), r.GetInt32(4), r.GetInt32(5),
                     t.Anomalies, t.FirstUnload, t.FirstCarousel, t.LastCarousel, firstBagMinutes,
-                    stalled.GetValueOrDefault(id)));
+                    stalled.GetValueOrDefault(id), r.GetInt32(6), r.GetInt32(7)));
             }
         }
 

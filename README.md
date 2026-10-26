@@ -13,6 +13,7 @@ Havalimanında bagaj yolculuğunu izleyen, yolcuya "bagajım ne zaman gelir" sor
 - Yolcu, PNR ve soyadıyla bagajını sorgular. Ad, soyad ve PNR düz metin saklanmaz; yalnızca HMAC-SHA256 arama anahtarı tutulur. Kayıt yok, PNR yanlış ve soyad yanlış durumları aynı yanıtı verir, sorgu IP başına dakikada 20 ile sınırlıdır.
 - Bagaj uçaktan indikten sonra banta çıkış süresini **aralık** olarak tahmin eder (P10 / P50 / P90). İndirmeden sonra tahmin, simülasyondaki geçmiş uçuşların gerçekleşen sürelerinden hesaplanır; yeterli geçmiş yoksa bunu açıkça belirtir. İniş öncesinde uçuşun özelliklerine bakan bir makine öğrenmesi modeli (kuantil LightGBM) uçuş düzeyinde aralık verir. ML servisi kapalıysa sistem eski tahmine döner.
 - ML servisi (FastAPI): ilk bavul, ilk→son bavul süresi ve son bavul için P10/P50/P90 tahmini. Biten uçuşların gerçek süreleri servise geri bildirilir; servis bunlardan canlı düzeltme hesaplar ve yağmurlu/yavaş günlerdeki kaymayı yakalar. Değerlendirme, sonuçlar ve sınırlar: [docs/EVALUATION.md](docs/EVALUATION.md).
+- Çıkış: kapıdaki okuma (`EXIT`) bavulu "çıkış okundu" yapar. Banttan alındıktan sonra 180 sn içinde okunmayan bavul, bir worker tarafından "çıkış okunmadı" (inceleme gerektiren durum, sonuç değil) olarak işaretlenir; sonradan okunursa kapanır. Yolcu eşleştirmesi yok, o ayrı bir aşamadır.
 - Operasyon panosu: uçuş başına bagaj sayıları, ilk bagaj süresi, sıra dışı olaylar ve 20 dakikadan uzun süredir bantta bekleyen bagajlar.
 - Değişiklikler outbox üzerinden SignalR ile canlı iletilir. Bildirimler içeriksizdir ("bu bagaj değişti"), ayrıntıyı istemci yeniden çeker. Canlı bağlantı yoksa arayüz yoklamaya döner.
 
@@ -93,8 +94,8 @@ Birim testleri Docker gerektirmez. Entegrasyon testleri Testcontainers ile gerç
 - Sonuçlar yalnızca simülasyonla doğrulandı; model ve simülatör aynı üretici ailesinden geliyor, bu yüzden sonuçlar iyimser olabilir. Ölçümler uçuş düzeyindedir (`docs/EVALUATION.md`). İniş öncesi bavul düzeyindeki ML penceresi bir basitleştirmedir ve ayrıca ölçülmemiştir.
 - `/v1/events`, `/v1/flights` ve `/hubs/live` uçlarında kimlik doğrulama yok; yalnızca yerel demo içindir.
 - Depodaki gizli anahtar ve veritabanı parolası geliştirme varsayılanlarıdır. Gerçek bir kurulumda ortam değişkeniyle (`Security__LookupKeySecret`, `ConnectionStrings__Default`) verilmelidir.
-- Çıkış doğrulama (bagaj-yolcu eşleştirme) henüz yok. Çıkış süresi kayıtları tutuluyor, ama bu kayıtları temizleyen bir okuma ve süresi dolanları işleyen bir worker yok.
+- Çıkış doğrulama (bagaj-yolcu eşleştirme, yanlış kişi kontrolü) henüz yok; mevcut çıkış okuması yalnızca "okundu" bilgisidir. Süre dolumu sanal saatle çalışır (olay akışı durursa durur).
 - Havalimanı bağlamı (gövde tipi, hava, mesafeler, yer hizmeti firması) gerçek bir AODB'den değil, simülatörden gelir. ML servisinin düzeltme durumu bellektedir ve yeniden başlayınca sıfırlanır; servis kimlik doğrulaması istemez, yalnızca yerel makineye açıktır.
 - Bantta takılı bagaj yalnızca sayılır, durumu değiştirilmez.
 
-Yol haritası: çıkış doğrulama modülü (Faz 3), kimlik doğrulama (Faz 4).
+Yol haritası: çıkış doğrulama / yolcu eşleştirme, kimlik doğrulama.

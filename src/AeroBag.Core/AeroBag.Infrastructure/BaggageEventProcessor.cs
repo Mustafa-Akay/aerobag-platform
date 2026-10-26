@@ -199,7 +199,7 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
             {
                 await using var dl = Cmd(conn, tx,
                     "INSERT INTO exit_deadlines (bag_id, due_at_utc) VALUES (@id, @due) ON CONFLICT (bag_id) DO NOTHING",
-                    P("id", bagId), P("due", received + ExitDeadline));
+                    P("id", bagId), P("due", ev.OccurredAtUtc + ExitDeadline)); // olay zamanına bağlı: sanal saatte de doğru çalışır
                 await dl.ExecuteNonQueryAsync(ct);
             }
             else if (newState == BagState.ExitCleared)

@@ -1,7 +1,8 @@
 namespace AeroBag.Simulator;
 
 /// <param name="Regime">'A' normal operasyon, 'B' yağmurlu ve yavaş operasyon, 'M' karışık.</param>
-public sealed record SimOptions(int Flights, int BaseBags, int Seed, char Regime, DateTimeOffset StartUtc);
+/// <param name="ExitScans">Banttan alınan bavullar için çıkış kapısı taramaları da üretilsin mi (canlı gösterim için).</param>
+public sealed record SimOptions(int Flights, int BaseBags, int Seed, char Regime, DateTimeOffset StartUtc, bool ExitScans = false);
 
 public sealed record FlightInfo(
     string FlightId,

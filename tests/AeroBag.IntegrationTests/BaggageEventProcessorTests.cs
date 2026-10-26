@@ -101,7 +101,7 @@ public class BaggageEventProcessorTests(PostgresFixture fx) : IClassFixture<Post
             """
             SELECT count(*) FROM exit_deadlines d JOIN bags b ON b.bag_id = d.bag_id
             WHERE b.bag_tag_number = @t AND d.status = 'PENDING'
-              AND d.due_at_utc = TIMESTAMPTZ '2026-10-22 14:03:00+00'
+              AND d.due_at_utc = TIMESTAMPTZ '2026-10-22 21:24:00+00'
             """, tag));
     }
 

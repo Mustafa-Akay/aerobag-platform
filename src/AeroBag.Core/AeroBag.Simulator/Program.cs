@@ -17,6 +17,7 @@ if (a.ContainsKey("help"))
           --start ISO-TARİH      ilk uçuşun iniş saati (varsayılan bugün 12:00 UTC)
           csv modu:  --out YOL   (varsayılan data\synthetic\bags.csv)
           live modu: --api URL   (varsayılan http://localhost:5080)
+                     --exit-scans false   çıkış kapısı taramalarını kapatır (varsayılan açık)
                      --speed X   sanal saniye / gerçek saniye (varsayılan 60)
                      --dup-rate P --drop-rate P --corrupt-rate P   (varsayılan 0.02, 0.01, 0.005)
         """);
@@ -34,7 +35,8 @@ if (regime is not ('A' or 'B' or 'M'))
     return 1;
 }
 
-var options = new SimOptions(GetInt("flights", 3), GetInt("bags", 120), GetInt("seed", 42), regime, start);
+var exitScans = mode == "live" && !string.Equals(Get("exit-scans", "true"), "false", StringComparison.OrdinalIgnoreCase);
+var options = new SimOptions(GetInt("flights", 3), GetInt("bags", 120), GetInt("seed", 42), regime, start, exitScans);
 var flights = SimulationRunner.Run(options);
 var totalBags = flights.Sum(f => f.Bags.Count);
 Console.WriteLine($"{flights.Count} uçuş, {totalBags} bavul üretildi (tohum {options.Seed}, rejim {regime}).");

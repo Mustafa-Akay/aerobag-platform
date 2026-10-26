@@ -22,6 +22,11 @@ public static class FlightGenerator
     private const double CartPauseChance = 0.20;
     private const double CartPauseMeanSeconds = 90;
 
+    // Çıkış taramaları (yalnızca ExitScans açıkken): banttan alındıktan sonra 30 sn + üstel gecikme (ort. 40 sn).
+    private const double ExitMissChance = 0.02;
+    private const double ExitMinSeconds = 30;
+    private const double ExitMeanExtraSeconds = 40;
+
     private const string PnrChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
     public static FlightResult Generate(int index, SimOptions o, SimRandom rng)
@@ -142,6 +147,23 @@ public static class FlightGenerator
                 MessageFormatter.Bpm(flightNumber, date, tag, cc, carouselT[i]), tag, "CAROUSEL"));
             messages.Add(new ScheduledMessage(claim[i],
                 MessageFormatter.Bpm(flightNumber, date, tag, $"CLAIM{carousel:D2}", claim[i]), tag, "CLAIM"));
+        }
+
+        if (o.ExitScans)
+        {
+            // Ayrı rastgele akış: çıkış taramaları açılıp kapanınca diğer verinin (CSV, ML eğitimi) değişmemesi için.
+            var exitRng = new SimRandom(unchecked(o.Seed * 100003 + index));
+            for (var i = 0; i < bagCount; i++)
+            {
+                // %2 bavul çıkış kapısında hiç okunmaz (etiket sorunu, başka çıkış, okuyucu kaçırması).
+                if (exitRng.Chance(ExitMissChance))
+                {
+                    continue;
+                }
+                var exit = claim[i].AddSeconds(ExitMinSeconds + exitRng.Exp(ExitMeanExtraSeconds));
+                messages.Add(new ScheduledMessage(exit,
+                    MessageFormatter.Bpm(flightNumber, date, bags[i].BagTag, "EXIT01", exit), bags[i].BagTag, "EXIT"));
+            }
         }
 
         var info = new FlightInfo(flightId, flightNumber, date, regime, aircraft, wide, rain ? "RAIN" : "CLEAR",

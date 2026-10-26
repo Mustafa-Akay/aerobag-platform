@@ -19,7 +19,7 @@ public static class CsvExporter
         using var w = new StreamWriter(path);
         w.WriteLine(string.Join(',',
             "flight_id", "bag_tag", "regime", "aircraft_type", "wide_body", "weather", "total_bags",
-            "stand_distance_m", "chute_to_carousel_m", "conveyor_speed_mps", "arrivals_last_30min",
+            "stand_distance_m", "chute_to_carousel_m", "conveyor_speed_mps", "arrivals_last_30min", "ground_handler",
             "on_block_utc", "unload_utc", "chute_utc", "carousel_utc", "claim_utc",
             "unload_index", "sec_onblock_to_unload", "sec_onblock_to_carousel", "is_first_bag", "is_last_bag"));
 
@@ -31,7 +31,7 @@ public static class CsvExporter
                 w.WriteLine(string.Join(',',
                     i.FlightId, b.BagTag, i.Regime, i.AircraftType, i.WideBody ? 1 : 0, i.Weather, i.TotalBags,
                     i.StandDistanceM, i.ChuteToCarouselM, i.ConveyorSpeedMps.ToString(CultureInfo.InvariantCulture),
-                    i.ArrivalsLast30Min,
+                    i.ArrivalsLast30Min, i.GroundHandler,
                     Iso(i.OnBlockUtc), Iso(b.UnloadUtc), Iso(b.ChuteUtc), Iso(b.CarouselUtc), Iso(b.ClaimUtc),
                     b.UnloadIndex,
                     ((int)(b.UnloadUtc - i.OnBlockUtc).TotalSeconds).ToString(CultureInfo.InvariantCulture),

@@ -17,7 +17,8 @@ public sealed record FlightInfo(
     int Carousel,
     int TotalBags,
     DateTimeOffset OnBlockUtc,
-    int ArrivalsLast30Min);
+    int ArrivalsLast30Min,
+    string GroundHandler);
 
 /// <summary>Simülatörün bildiği gerçek zamanlar (mesajlar kayıp olsa bile bunlar eksiksizdir).</summary>
 public sealed record BagTruth(

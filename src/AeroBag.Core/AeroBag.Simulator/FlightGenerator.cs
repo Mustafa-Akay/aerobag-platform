@@ -12,6 +12,16 @@ public static class FlightGenerator
     private static readonly string[] Wide = ["A333", "B788"];
     private static readonly string[] Surnames = ["YILMAZ", "KAYA", "DEMIR", "CELIK", "SAHIN", "OZTURK", "AYDIN", "ARSLAN", "DOGAN", "KILIC"];
     private static readonly string[] Givens = ["AYSE", "MEHMET", "FATMA", "ALI", "ZEYNEP", "MUSTAFA", "ELIF", "HASAN", "EMINE", "AHMET"];
+    private static readonly string[] HandlerNames = ["HANDLER_A", "HANDLER_B", "HANDLER_C"];
+    private static readonly double[] HandlerPace = [0.85, 1.0, 1.2];
+
+    // Gürültü parametreleri: ml/ kalibrasyon deneyiyle seçildi (docs/EVALUATION.md). Gerçek ölçüm değil, demo varsayımıdır.
+    private const double CrewSigma = 0.25;
+    private const double DisruptionChance = 0.20;
+    private const double DisruptionMeanSeconds = 480;
+    private const double CartPauseChance = 0.20;
+    private const double CartPauseMeanSeconds = 90;
+
     private const string PnrChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
     public static FlightResult Generate(int index, SimOptions o, SimRandom rng)
@@ -31,9 +41,17 @@ public static class FlightGenerator
         var chuteDist = rng.Int(30, 70);
         var speed = Math.Round(rng.Uniform(0.50, 0.60), 2);
         var carousel = rng.Int(1, 7);
+
+        // Yer hizmeti firması gözlenebilir bir özelliktir (AODB'den bilinir) ve hızı gerçekten etkiler.
+        var handlerIdx = rng.Int(0, 3);
+        var handler = HandlerNames[handlerIdx];
+        // Gözlenemeyen ekip hızı: aynı firma içinde bile uçuştan uçuşa değişir (çarpan, log-normal).
+        var crew = Math.Exp(rng.Normal(0, CrewSigma));
+        var pace = crew * HandlerPace[handlerIdx];
         var aircraft = wide ? rng.Pick(Wide) : rng.Pick(Narrow);
 
-        var onBlock = o.StartUtc.AddMinutes(index * 15);
+        // Gerçek tarifede inişler eşit aralıklı değildir; sapma yoğunluk özelliğinin (arrivals_last_30min) değişmesini sağlar.
+        var onBlock = o.StartUtc.AddMinutes(index * 15 + rng.Uniform(-7, 7));
         var date = DateOnly.FromDateTime(onBlock.UtcDateTime);
         var flightNumber = $"ZZ{100 + index:D4}";
         var flightId = $"{flightNumber}-{date:yyyyMMdd}";
@@ -41,12 +59,18 @@ public static class FlightGenerator
 
         // Uçaktan indirme: ilk bavul gecikmesi + bavul aralıkları.
         var unload = new DateTimeOffset[bagCount];
-        var t = onBlock.AddSeconds((240 + rng.LogNormal(120, 0.4)) * load * (wide ? 1.25 : 1.0));
+        var firstDelay = (240 + rng.LogNormal(120, 0.4)) * load * (wide ? 1.25 : 1.0) * pace;
+        if (rng.Chance(DisruptionChance))
+        {
+            firstDelay += rng.Exp(DisruptionMeanSeconds); // geç gelen ekipman/personel: ağır kuyruk
+        }
+
+        var t = onBlock.AddSeconds(firstDelay);
         for (var i = 0; i < bagCount; i++)
         {
             if (i > 0)
             {
-                t = t.AddSeconds(1.5 + rng.Exp(1.5 * load));
+                t = t.AddSeconds(1.5 + rng.Exp(1.5 * load * pace));
             }
             unload[i] = t;
         }
@@ -59,6 +83,11 @@ public static class FlightGenerator
             var end = Math.Min(bagCount, start + rng.Int(8, 17));
             var depart = unload[end - 1];
             var transport = standDist / rng.Uniform(5, 7) * load + rng.Exp(30);
+            if (rng.Chance(CartPauseChance))
+            {
+                transport += rng.Exp(CartPauseMeanSeconds); // araba beklemesi (başka uçuşa kaydırma, trafik)
+            }
+
             var arrive = depart.AddSeconds(transport);
             for (var k = start; k < end; k++)
             {
@@ -116,7 +145,7 @@ public static class FlightGenerator
         }
 
         var info = new FlightInfo(flightId, flightNumber, date, regime, aircraft, wide, rain ? "RAIN" : "CLEAR",
-            standDist, chuteDist, speed, carousel, bagCount, onBlock, 0);
+            standDist, chuteDist, speed, carousel, bagCount, onBlock, 0, handler);
 
         return new FlightResult(info, bags, messages.OrderBy(m => m.TimeUtc).ToList());
     }

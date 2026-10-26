@@ -1,0 +1,27 @@
+{
+  "features": [
+    "wide",
+    "rain",
+    "bags",
+    "stand_m",
+    "chute_m",
+    "speed",
+    "arrivals_30",
+    "h_A",
+    "h_B",
+    "h_C"
+  ],
+  "targets": [
+    "first_min",
+    "span_min",
+    "last_min"
+  ],
+  "quantiles": [
+    0.1,
+    0.5,
+    0.9
+  ],
+  "n_flights": 1000,
+  "train_csv_sha256": "476d66493a56f473a39a60b782099ddb830817e391d339f94a06b2310f48fdfa",
+  "note": "Sentetik veriyle egitildi (rejim A). Ayrinti: docs/EVALUATION.md"
+}

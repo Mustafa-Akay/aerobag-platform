@@ -16,5 +16,11 @@ services:
       timeout: 3s
       retries: 10
 
+  # ML tahmin servisi (Faz 2). Yalnizca yerel makineye acik; kimlik dogrulamasi yok, internete acilmamali.
+  ml:
+    build: ./ml
+    ports:
+      - "127.0.0.1:8000:8000"
+
 volumes:
   pgdata:

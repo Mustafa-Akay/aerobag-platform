@@ -11,7 +11,8 @@ Havalimanında bagaj yolculuğunu izleyen, yolcuya "bagajım ne zaman gelir" sor
 - Basitleştirilmiş Type B mesajlarını (BSM, BUM, BPM) sıkı sınırlarla ayrıştırır ve bagaj durum makinesinden geçirir. Durum sırası monotondur; atlanan adımlar "sıra dışı" olarak işaretlenir, geriden gelen mesajlar yok sayılır.
 - Aynı mesajın tekrar gelmesini güvenle karşılar (idempotent), geçersiz mesajları ölü mektup tablosuna yazar.
 - Yolcu, PNR ve soyadıyla bagajını sorgular. Ad, soyad ve PNR düz metin saklanmaz; yalnızca HMAC-SHA256 arama anahtarı tutulur. Kayıt yok, PNR yanlış ve soyad yanlış durumları aynı yanıtı verir, sorgu IP başına dakikada 20 ile sınırlıdır.
-- Bagaj uçaktan indikten sonra banta çıkış süresini **aralık** olarak tahmin eder (P10 / P50 / P90). Tahmin, simülasyondaki geçmiş uçuşların gerçekleşen sürelerinden hesaplanır. Yeterli geçmiş yoksa bunu açıkça belirtir.
+- Bagaj uçaktan indikten sonra banta çıkış süresini **aralık** olarak tahmin eder (P10 / P50 / P90). İndirmeden sonra tahmin, simülasyondaki geçmiş uçuşların gerçekleşen sürelerinden hesaplanır; yeterli geçmiş yoksa bunu açıkça belirtir. İniş öncesinde uçuşun özelliklerine bakan bir makine öğrenmesi modeli (kuantil LightGBM) uçuş düzeyinde aralık verir. ML servisi kapalıysa sistem eski tahmine döner.
+- ML servisi (FastAPI): ilk bavul, ilk→son bavul süresi ve son bavul için P10/P50/P90 tahmini. Biten uçuşların gerçek süreleri servise geri bildirilir; servis bunlardan canlı düzeltme hesaplar ve yağmurlu/yavaş günlerdeki kaymayı yakalar. Değerlendirme, sonuçlar ve sınırlar: [docs/EVALUATION.md](docs/EVALUATION.md).
 - Operasyon panosu: uçuş başına bagaj sayıları, ilk bagaj süresi, sıra dışı olaylar ve 20 dakikadan uzun süredir bantta bekleyen bagajlar.
 - Değişiklikler outbox üzerinden SignalR ile canlı iletilir. Bildirimler içeriksizdir ("bu bagaj değişti"), ayrıntıyı istemci yeniden çeker. Canlı bağlantı yoksa arayüz yoklamaya döner.
 
@@ -28,6 +29,9 @@ Simülatör ──Type B metni──▶ POST /v1/events
               GET /v1/lookup, /v1/flights ◀───────────────┘
                                ▲
                    React arayüzü (yolcu sayfası, operasyon panosu)
+
+Simülatör ──uçuş bağlamı (AODB taklidi)──▶ POST /v1/flights/context ──▶ flight_context
+API ◀──── P10/P50/P90 ────▶ ML servisi (FastAPI, ml/service)   ◀── biten uçuşların gerçek süreleri
 ```
 
 Ayrıntılı tasarım: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Kodun tasarımdan ayrıştığı yerler ve bilinen eksikler: [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
@@ -37,7 +41,7 @@ Ayrıntılı tasarım: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Kodun tasar
 Gereksinimler: .NET 10 SDK, Docker Desktop, Node 20+.
 
 ```powershell
-docker compose up -d                                   # PostgreSQL (host portu 5433)
+docker compose up -d --build                           # PostgreSQL (host portu 5433) + ML servisi (127.0.0.1:8000)
 dotnet run --project src\AeroBag.Core\AeroBag.Api --urls http://localhost:5080
 ```
 
@@ -59,13 +63,16 @@ dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode live --speed 5
 
 Şema değiştiğinde veritabanı `docker compose down -v` ile sıfırlanır. Postgres hazır olmadan API'yi başlatmayın: hazır değilken gönderilen olaylar kaybolur ve sonraki olaylar "sıra dışı" görünür.
 
+ML servisi çalışmıyorsa API yine açılır; iniş öncesi bavullarda tahmin gösterilmez. Servisi yeniden eğitmek ve değerlendirmeyi yeniden üretmek için [docs/EVALUATION.md](docs/EVALUATION.md) sonundaki komutlara bakın.
+
 ## Testler
 
 ```powershell
 dotnet test
+cd ml; python -m pytest -q tests                       # Python tarafı (Python 3.12, ml/requirements.txt)
 ```
 
-Birim testleri Docker gerektirmez. Entegrasyon testleri Testcontainers ile gerçek bir PostgreSQL konteyneri başlatır, bu yüzden Docker açık olmalıdır. Her `push`'ta GitHub Actions aynı testleri ve arayüz derlemesini çalıştırır.
+Birim testleri Docker gerektirmez. Entegrasyon testleri Testcontainers ile gerçek bir PostgreSQL konteyneri başlatır, bu yüzden Docker açık olmalıdır. Her `push`'ta GitHub Actions .NET testlerini, Python testlerini ve arayüz derlemesini çalıştırır.
 
 ## Proje yapısı
 
@@ -77,16 +84,17 @@ Birim testleri Docker gerektirmez. Entegrasyon testleri Testcontainers ile gerç
 | `src/AeroBag.Core/AeroBag.Api` | Minimal API, SignalR hub'ı, arka plan servisi |
 | `src/AeroBag.Core/AeroBag.Simulator` | Tohumlu, gürültü ayarlı bagaj akışı üretici |
 | `src/aerobag-ui` | React + TypeScript + Tailwind arayüzü |
+| `ml` | Python paketi (veri, modeller, değerlendirme) ve FastAPI tahmin servisi |
 | `tests` | Birim ve entegrasyon testleri |
 | `db/init.sql` | Veritabanı şeması |
 
 ## Sınırlar ve açık işler
 
-- Sonuçlar yalnızca simülasyonla doğrulandı. ETA taban çizgisinin doğruluk ve kapsama ölçümü henüz yapılmadı.
+- Sonuçlar yalnızca simülasyonla doğrulandı; model ve simülatör aynı üretici ailesinden geliyor, bu yüzden sonuçlar iyimser olabilir. Ölçümler uçuş düzeyindedir (`docs/EVALUATION.md`). İniş öncesi bavul düzeyindeki ML penceresi bir basitleştirmedir ve ayrıca ölçülmemiştir.
 - `/v1/events`, `/v1/flights` ve `/hubs/live` uçlarında kimlik doğrulama yok; yalnızca yerel demo içindir.
 - Depodaki gizli anahtar ve veritabanı parolası geliştirme varsayılanlarıdır. Gerçek bir kurulumda ortam değişkeniyle (`Security__LookupKeySecret`, `ConnectionStrings__Default`) verilmelidir.
 - Çıkış doğrulama (bagaj-yolcu eşleştirme) henüz yok. Çıkış süresi kayıtları tutuluyor, ama bu kayıtları temizleyen bir okuma ve süresi dolanları işleyen bir worker yok.
-- Uçak tipi, park mesafesi, hava durumu ve bant numarası gibi havalimanı bağlamı henüz alınmıyor. Makine öğrenmesi aşamasından önce gerekir.
+- Havalimanı bağlamı (gövde tipi, hava, mesafeler, yer hizmeti firması) gerçek bir AODB'den değil, simülatörden gelir. ML servisinin düzeltme durumu bellektedir ve yeniden başlayınca sıfırlanır; servis kimlik doğrulaması istemez, yalnızca yerel makineye açıktır.
 - Bantta takılı bagaj yalnızca sayılır, durumu değiştirilmez.
 
-Yol haritası: bağlam verisi girişi, ETA doğruluk ölçümü ve kuantil modeli, çıkış doğrulama modülü.
+Yol haritası: çıkış doğrulama modülü (Faz 3), kimlik doğrulama (Faz 4).

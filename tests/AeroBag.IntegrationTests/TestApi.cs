@@ -16,7 +16,7 @@ internal static class TestApi
 
     public static WebApplicationFactory<Program> Create(PostgresFixture fx) => new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
     {
-        b.UseSetting("ConnectionStrings:Default", fx.ConnectionString);
+        b.UseSetting("ConnectionStrings:Default", fx.AppConnectionString);
         b.UseSetting("Ml:BaseUrl", "");
         b.UseSetting("Auth:SigningKey", "integration-test-signing-key-0123456789abcdef");
         b.UseSetting("Ingest:Sources:0:Id", SourceId);

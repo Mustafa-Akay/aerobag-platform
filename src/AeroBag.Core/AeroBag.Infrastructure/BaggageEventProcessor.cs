@@ -173,7 +173,7 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
                          P("eid", Guid.NewGuid()), P("ik", ev.IdempotencyKey), P("bid", bagId), P("mt", ev.MessageType),
                          P("from", current is null ? null : StateNames.ToDb(current.Value)),
                          P("to", StateNames.ToDb(stale ? ev.TargetState : newState)),
-                         P("oc", outcome), P("sc", ev.ScanPoint), P("src", source.Length > 32 ? source[..32] : source), P("raw", rawText), J("pl", payload),
+                         P("oc", outcome), P("sc", ev.ScanPoint), P("src", source.Length > 32 ? source[..32] : source), P("raw", TypeBRedactor.Redact(rawText)), J("pl", payload),
                          P("occ", ev.OccurredAtUtc), P("rec", received)))
         {
             await evCmd.ExecuteNonQueryAsync(ct);
@@ -219,7 +219,9 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
 
     private async Task DeadLetterAsync(string source, string? rawText, string error, CancellationToken ct)
     {
-        var raw = rawText ?? string.Empty;
+        // Ham metin ve hata metni kişisel alan (.P ad, .L PNR) içermesin diye maskelenir.
+        var raw = TypeBRedactor.Redact(rawText);
+        error = TypeBRedactor.ScrubText(error, rawText);
         if (raw.Length > 2000)
         {
             raw = raw[..2000];

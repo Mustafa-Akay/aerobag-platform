@@ -12,7 +12,7 @@ using Npgsql;
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("Default")
-    ?? "Host=localhost;Port=5433;Database=aerobag;Username=aerobag;Password=aerobag_dev";
+    ?? "Host=localhost;Port=5433;Database=aerobag;Username=aerobag_app;Password=aerobag_app_dev"; // kısıtlı uygulama rolü (db/init.sql)
 
 // Yalnızca geliştirme varsayılanı; gerçek kurulumda ortam değişkeniyle (Security__LookupKeySecret) verilir.
 var lookupSecret = builder.Configuration["Security:LookupKeySecret"] ?? "dev-only-secret-change-me-0123456789";

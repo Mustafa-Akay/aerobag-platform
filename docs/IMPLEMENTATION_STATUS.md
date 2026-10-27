@@ -33,14 +33,14 @@ Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, �
 - **Olay zamanı.** BSM'nin zamanı mesajda yoktur, alınma anı kullanılır. BUM ve BPM zamanı mesajdan gelir.
 - **ETA tabanı.** Olay geçmişinden `percentile_cont` ile hesaplanır. En az 20 örnek varsa `HISTORY`, yoksa sabit varsayılanlar (`FALLBACK`: iniş→bant 300/540/900 sn, şut→bant 60/90/150 sn). ML kapalı ya da bağlam yokken ETA yalnızca bagaj indirildikten sonra verilir; ML açıkken indirme öncesinde de aralık gösterilir.
 - **Referans an (`asOfUtc`).** Simülasyonda "şimdi", BSM olmayan olayların en son zamanıdır (sanal saat). Gerçek kurulumda gerçek saat olmalıdır.
-- **Yolcu verisi.** Ad, soyad ve PNR düz metin saklanmaz; yalnızca `HMAC-SHA256(gizli anahtar, PNR|soyad)` arama anahtarı tutulur. Geliştirme varsayılan anahtarı kodda durur; gerçek kurulumda `Security__LookupKeySecret` verilmelidir.
+- **Yolcu verisi.** Ad, soyad ve PNR düz metin saklanmaz; yalnızca `HMAC-SHA256(gizli anahtar, PNR|soyad)` arama anahtarı tutulur. Faz 4.3'e kadar olay günlüğündeki ham BSM metni ad ve PNR satırlarını içeriyordu; bu düzeltildi (aşağıda). Geliştirme varsayılan anahtarı kodda durur; gerçek kurulumda `Security__LookupKeySecret` verilmelidir.
 - **Bant numarası** saklanmıyor, arayüzde gösterilmiyor (AODB bağlamı yok).
 - **Canlı bildirim.** `/hubs/live` kanalı içeriksizdir: `bagChanged` (grup `bag:{etiket}`) ve `flightsChanged` (grup `ops`). İstemci ayrıntıyı REST ile yeniden çeker. Canlı bağlantı varken yoklama 20 sn'ye, yokken 3 sn'ye ayarlıdır.
 - **Outbox garantisi.** En az bir kez teslim, `seq` sırası, 5 başarısız denemeden sonra mesaj bekletilir. Tek örnek varsayılır.
 
 ## Bilinen eksikler ve riskler
 
-1. **Kimlik doğrulama:** personel ve yolcu tarafı JWT ile (aşağıda "Faz 4.1"), mesaj kaynakları HMAC imzasıyla (aşağıda "Faz 4.2") korunuyor. Olay günlüğü henüz veritabanı düzeyinde yalnızca eklemeli değil; uygulama hesabı UPDATE/DELETE yapabilir.
+1. **Kimlik doğrulama:** personel ve yolcu tarafı JWT ile (aşağıda "Faz 4.1"), mesaj kaynakları HMAC imzasıyla (aşağıda "Faz 4.2") korunuyor. Olay günlüğü veritabanı düzeyinde yalnızca eklemelidir (aşağıda "Faz 4.3").
 2. **Çıkışta yolcu eşleştirmesi yok.** Çıkış okuması ve süre dolumu çalışıyor (aşağıda "Faz 4, ilk dilim"), ama bavul ile sunulan PNR karşılaştırılmıyor; yanlış kişi kontrolü (`EXIT_REVIEW`) yok. Faz 4.
 3. **Bantta takılı bagaj tespiti yok.** "Alındı" mesajı düşerse bagaj sonsuza dek `ON_CAROUSEL` kalır; çıkış süresi bunu çözmez çünkü sayaç alınma anında başlar.
 4. **AODB bağlamı simülatörden gelir:** gövde tipi, hava, mesafeler ve yer hizmeti firması `POST /v1/flights/context` ile verilir; gerçek bir uçuş bilgi sistemi yok. Bant numarası hâlâ saklanmıyor.
@@ -145,4 +145,18 @@ Bilinen sınırlar:
 - Ortak gizli anahtar kullanılır (simetrik). Anahtar döndürme ve kaynak başına birden çok anahtar yok. Asimetrik imza ya da mTLS daha güçlü bir seçenektir.
 - Demo kaynağının anahtarı kodda ve README'de yazılıdır; yapılandırmada `Ingest:Sources` verilince kabul edilmez.
 - Alma uçlarında hız sınırı yok; imzasız istekler gövde okunmadan reddedilir, imzalı ama yoğun gönderime karşı ayrı bir sınır eklenmedi.
+
+## Faz 4.3: yalnızca eklemeli olay günlüğü ve ham metinde kişisel veri
+
+- **Bulunan açık:** olay günlüğü (`baggage_events.raw_text`) ve ölü mektup tablosu, gelen BSM'nin ham metnini saklıyordu; bu metinde yolcu adı (`.P/`) ve PNR (`.L/`) düz metin olarak vardı. Bu, "ad ve PNR düz metin saklanmaz" iddiasıyla çelişiyordu.
+- **Düzeltme:** ham metin saklanmadan önce `.P/` ve `.L/` satırları maskelenir (`TypeBRedactor`). Ölü mektup kaydında hata metninden de bu değerler temizlenir. Arama için gereken bilgi zaten HMAC özetindedir.
+- **Uygulama rolü:** API artık `aerobag_app` rolüyle bağlanır. Bu rolün hiçbir tabloda DELETE yetkisi yoktur; olay günlüğünde yalnızca SELECT ve INSERT, ölü mektup tablosunda yalnızca INSERT (okuyamaz), şemada tablo oluşturamaz. Diğer tablolarda yalnızca kodun kullandığı işlemler açıktır.
+- **Tetikleyici:** olay günlüğünde UPDATE, DELETE ve TRUNCATE, tablo sahibi için de tetikleyiciyle engellenir.
+- **Testler:** uygulama rolüyle olay yazılabilir ama değiştirilemez ve silinemez; hiçbir tabloda silme yok; ölü mektuplar okunamaz; tablo sahibi de olay günlüğünü değiştiremez; ham metinde ve ölü mektupta ad ve PNR kalmaz. Ayrıca tüm API testleri artık kısıtlı rolle çalışır, yani yetkiler API'nin işi için yeterlidir.
+- Şema değişti: `docker compose down -v` gerekir. Bağlantı dizesi değişti: `Username=aerobag_app;Password=aerobag_app_dev` (yalnızca yerel demo).
+
+Bilinen sınırlar:
+- Süper kullanıcı tetikleyiciyi kapatabilir ya da tabloyu silebilir. Bu katman kazara ya da uygulama üzerinden yapılan değişikliği engeller; veritabanı yöneticisine karşı koruma değildir. Ona karşı olay zinciri özeti (hash chain) ya da harici, değiştirilemez bir kayıt deposu gerekir; yapılmadı.
+- Daha önce oluşturulmuş veritabanlarındaki eski ham metinler bu değişiklikle temizlenmez; demo verisi olduğu için `docker compose down -v` ile sıfırlanır.
+- Saklama süresi dolan kişisel verinin silinmesi (KVKK) için uygulama rolüne ileride yalnızca o işe özel bir yetki verilmesi gerekecek.
 

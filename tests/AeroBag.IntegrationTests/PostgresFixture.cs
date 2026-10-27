@@ -12,6 +12,9 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public string ConnectionString => _container.GetConnectionString();
 
+    /// <summary>API'nin kullandığı kısıtlı rol (db/init.sql: aerobag_app). Yetkilerin yeterli olduğunu API testleri doğrular.</summary>
+    public string AppConnectionString => new NpgsqlConnectionStringBuilder(ConnectionString) { Username = "aerobag_app", Password = "aerobag_app_dev" }.ConnectionString;
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();

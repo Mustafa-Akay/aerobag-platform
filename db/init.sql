@@ -112,3 +112,36 @@ CREATE TABLE ml_bag_outcomes (
   bag_id           UUID PRIMARY KEY REFERENCES bags(bag_id),
   reported_at_utc  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ---------------------------------------------------------------------------
+-- Faz 4.3: uygulama rolü ve yalnızca eklemeli olay günlüğü.
+-- API bu kısıtlı rolle bağlanır. Hiçbir tabloda DELETE yetkisi yoktur; olay günlüğü ve ölü mektup tablosu
+-- yalnızca eklenebilir. Tablo sahibi (yönetici) de olay satırlarını tetikleyici yüzünden değiştiremez;
+-- süper kullanıcı tetikleyiciyi kapatabilir, bu yüzden bu bir kurcalama engeli değil, kurcalamayı zorlaştıran
+-- ve kazara değişikliği önleyen bir katmandır.
+-- Parola yalnızca yerel demo içindir; gerçek kurulumda ayrı verilir.
+-- ---------------------------------------------------------------------------
+CREATE ROLE aerobag_app LOGIN PASSWORD 'aerobag_app_dev';
+
+DO $$ BEGIN
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO aerobag_app', current_database());
+END $$;
+
+GRANT USAGE ON SCHEMA public TO aerobag_app;
+
+GRANT SELECT, INSERT          ON flights, passengers, ml_bag_outcomes TO aerobag_app;
+GRANT SELECT, INSERT, UPDATE  ON bags, outbox_messages, exit_deadlines, flight_context TO aerobag_app;
+GRANT SELECT, INSERT          ON baggage_events TO aerobag_app;
+GRANT INSERT                  ON dead_letter_messages TO aerobag_app;
+GRANT USAGE                   ON ALL SEQUENCES IN SCHEMA public TO aerobag_app;
+
+CREATE FUNCTION forbid_event_log_change() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION '% yalnızca eklemelidir; % engellendi', TG_TABLE_NAME, TG_OP
+    USING ERRCODE = 'insufficient_privilege';
+END $$;
+
+CREATE TRIGGER baggage_events_no_update_delete BEFORE UPDATE OR DELETE ON baggage_events
+  FOR EACH ROW EXECUTE FUNCTION forbid_event_log_change();
+CREATE TRIGGER baggage_events_no_truncate BEFORE TRUNCATE ON baggage_events
+  FOR EACH STATEMENT EXECUTE FUNCTION forbid_event_log_change();

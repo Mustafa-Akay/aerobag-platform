@@ -80,6 +80,11 @@ builder.Services.AddAuthorization(o =>
     o.AddPolicy(Roles.SecurityPolicy, p => p.RequireRole(Roles.Security));
 });
 
+// Mesaj kaynakları (Faz 4.2): /v1/events ve /v1/flights/context yalnızca HMAC imzalı istek kabul eder.
+var ingest = IngestSettings.FromConfiguration(builder.Configuration);
+builder.Services.AddSingleton(ingest);
+builder.Services.AddSingleton<SourceVerifier>();
+
 // Yolcu sorgusu PNR denemesine açık olduğu için IP başına dakikada 20 istekle sınırlı.
 // Personel girişi parola denemesine karşı IP başına dakikada 10 istekle sınırlı.
 builder.Services.AddRateLimiter(o =>
@@ -113,8 +118,14 @@ if (auth.UsingDemoUsers)
     app.Logger.LogWarning("Auth:Users verilmedi; demo kullanıcıları (ops, security) etkin. Yalnızca yerel demo içindir.");
 }
 
+if (ingest.UsingDemoSource)
+{
+    app.Logger.LogWarning("Ingest:Sources verilmedi; demo kaynağı (simulator) etkin. Yalnızca yerel demo içindir.");
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseSourceSignatures();
 app.UseRateLimiter();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
@@ -127,14 +138,14 @@ app.MapPost("/v1/events", async (HttpRequest request, BaggageEventProcessor proc
     var count = await reader.ReadBlockAsync(buffer.AsMemory(), ct);
     var text = new string(buffer, 0, count);
 
-    var result = await processor.ProcessAsync(text, "api", ct);
+    var result = await processor.ProcessAsync(text, request.HttpContext.VerifiedSource(), ct);
     return result.Status switch
     {
         ProcessResult.Rejected => Results.Json(result, statusCode: StatusCodes.Status422UnprocessableEntity),
         ProcessResult.Duplicate => Results.Json(result, statusCode: StatusCodes.Status200OK),
         _ => Results.Json(result, statusCode: StatusCodes.Status202Accepted),
     };
-});
+}).WithMetadata(new RequireSourceScope(IngestScopes.Events));
 
 // Personel tüm bagajları, yolcu yalnızca jetonundaki bagajları görür. Yetkisiz bagaj için 404 döner (varlığı sızdırılmaz).
 app.MapGet("/v1/bags/{bagTag}", async (string bagTag, string? flight, ClaimsPrincipal user, BagQueries queries, CancellationToken ct) =>
@@ -195,7 +206,7 @@ app.MapGet("/v1/flights", async (OpsQueries ops, CancellationToken ct) => Result
 app.MapGet("/v1/flights/sla", async (SlaQueries sla, CancellationToken ct) => Results.Ok(await sla.GetAsync(ct)))
     .RequireAuthorization(Roles.StaffPolicy);
 
-// AODB uçuş bağlamı beslemesi (ML tahmini için). Kimlik doğrulama sonraki fazda; şimdilik yalnızca yerel demo.
+// AODB uçuş bağlamı beslemesi (ML tahmini için). Yalnızca 'context' kapsamlı, imzalı kaynaklar.
 app.MapPost("/v1/flights/context", async (FlightContext body, FlightContextStore store, CancellationToken ct) =>
 {
     var error = body.Validate();
@@ -206,7 +217,7 @@ app.MapPost("/v1/flights/context", async (FlightContext body, FlightContextStore
 
     await store.UpsertAsync(body, ct);
     return Results.Accepted();
-});
+}).WithMetadata(new RequireSourceScope(IngestScopes.Context));
 
 app.MapHub<LiveHub>("/hubs/live");
 

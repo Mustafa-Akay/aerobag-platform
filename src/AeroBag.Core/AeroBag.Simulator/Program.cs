@@ -20,6 +20,9 @@ if (a.ContainsKey("help"))
                      --exit-scans false   çıkış kapısı taramalarını kapatır (varsayılan açık)
                      --speed X   sanal saniye / gerçek saniye (varsayılan 60)
                      --dup-rate P --drop-rate P --corrupt-rate P   (varsayılan 0.02, 0.01, 0.005)
+                     --source-id AD          imzalı istek için kaynak adı (varsayılan simulator)
+                     --source-secret ANAHTAR kaynağın gizli anahtarı (varsayılan: AEROBAG_SOURCE_SECRET ortam
+                                             değişkeni, o da yoksa yalnızca yerel demo için olan varsayılan anahtar)
         """);
     return 0;
 }
@@ -71,13 +74,15 @@ if (mode == "live")
     var api = Get("api", "http://localhost:5080");
     var speed = GetDouble("speed", 60);
     var noise = new NoiseRates(GetDouble("dup-rate", 0.02), GetDouble("drop-rate", 0.01), GetDouble("corrupt-rate", 0.005));
-    var contexts = await ContextSender.SendAsync(api, flights.Select(f => f.Info), CancellationToken.None);
+    var secret = Get("source-secret", Environment.GetEnvironmentVariable("AEROBAG_SOURCE_SECRET") ?? SourceCredentials.Demo.Secret);
+    var creds = new SourceCredentials(Get("source-id", SourceCredentials.Demo.Id), secret);
+    var contexts = await ContextSender.SendAsync(api, flights.Select(f => f.Info), creds, CancellationToken.None);
     Console.WriteLine($"{contexts}/{flights.Count} uçuş bağlamı (AODB) gönderildi.");
     var messages = flights.SelectMany(f => f.Messages).OrderBy(m => m.TimeUtc).ToList();
     var paceFrom = flights.Min(f => f.Info.OnBlockUtc);
 
     Console.WriteLine($"{messages.Count} mesaj {api} adresine gönderiliyor (hız x{speed}, kopya/kayıp/bozuk oranları {noise.Duplicate}/{noise.Drop}/{noise.Corrupt})...");
-    var counts = await LiveSender.SendAsync(api, messages, paceFrom, speed, noise, options.Seed + 1, CancellationToken.None);
+    var counts = await LiveSender.SendAsync(api, messages, paceFrom, speed, noise, options.Seed + 1, creds, CancellationToken.None);
     Console.WriteLine("Sonuç:");
     foreach (var (key, value) in counts)
     {

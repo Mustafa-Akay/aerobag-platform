@@ -95,10 +95,10 @@ Birim testleri Docker gerektirmez. Entegrasyon testleri Testcontainers ile gerç
 ## Sınırlar ve açık işler
 
 - Sonuçlar yalnızca simülasyonla doğrulandı; model ve simülatör aynı üretici ailesinden geliyor, bu yüzden sonuçlar iyimser olabilir. Ölçümler uçuş düzeyindedir (`docs/EVALUATION.md`). İniş öncesi bavul düzeyindeki ML penceresi bir basitleştirmedir ve ayrıca ölçülmemiştir.
-- Operasyon uçları (`/v1/flights`, `/v1/flights/sla`) ve canlı kanal JWT ister; yolcu jetonu yalnızca kendi bagajlarına erişir. Mesaj alma uçları (`/v1/events`, `/v1/flights/context`) henüz imza istemiyor (Faz 4'ün sonraki adımı).
+- Operasyon uçları (`/v1/flights`, `/v1/flights/sla`) ve canlı kanal JWT ister; yolcu jetonu yalnızca kendi bagajlarına erişir. Mesaj alma uçları (`/v1/events`, `/v1/flights/context`) yalnızca HMAC imzalı istek kabul eder; simülatör demo kaynağı (`simulator`) olarak imzalar. Gerçek kurulumda kaynaklar `Ingest__Sources__0__Id`, `Ingest__Sources__0__Secret` (en az 32 bayt), `Ingest__Sources__0__Scopes` (`events,context,gate`) ile verilir; simülatöre aynı anahtar `--source-secret` ya da `AEROBAG_SOURCE_SECRET` ile verilir.
 - Depodaki gizli anahtar ve veritabanı parolası geliştirme varsayılanlarıdır. Gerçek bir kurulumda ortam değişkeniyle (`Security__LookupKeySecret`, `ConnectionStrings__Default`) verilmelidir.
 - Çıkış doğrulama (bagaj-yolcu eşleştirme, yanlış kişi kontrolü) henüz yok; mevcut çıkış okuması yalnızca "okundu" bilgisidir. Süre dolumu sanal saatle çalışır (olay akışı durursa durur).
 - Havalimanı bağlamı (gövde tipi, hava, mesafeler, yer hizmeti firması) gerçek bir AODB'den değil, simülatörden gelir. ML servisinin düzeltme durumu bellektedir ve yeniden başlayınca sıfırlanır; servis kimlik doğrulaması istemez, yalnızca yerel makineye açıktır.
 - Bantta takılı bagaj yalnızca sayılır, durumu değiştirilmez.
 
-Yol haritası (Faz 4): mesaj kaynaklarının imzalanması, yalnızca eklemeli olay günlüğü, çıkış doğrulama / yolcu eşleştirme, tehdit modeli ve KVKK notu.
+Yol haritası (Faz 4): yalnızca eklemeli olay günlüğü, çıkış doğrulama / yolcu eşleştirme, tehdit modeli ve KVKK notu.

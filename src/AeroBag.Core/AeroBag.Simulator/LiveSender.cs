@@ -20,6 +20,7 @@ public static class LiveSender
         double speed,
         NoiseRates noise,
         int seed,
+        SourceCredentials creds,
         CancellationToken ct)
     {
         var counts = new SortedDictionary<string, int>();
@@ -56,10 +57,10 @@ public static class LiveSender
                 Inc("CORRUPTED_SENT");
             }
 
-            await PostAsync(http, text, Inc, ct);
+            await PostAsync(http, text, creds, Inc, ct);
             if (rng.Chance(noise.Duplicate))
             {
-                await PostAsync(http, text, Inc, ct);
+                await PostAsync(http, text, creds, Inc, ct);
                 Inc("DUPLICATE_SENT");
             }
 
@@ -73,12 +74,13 @@ public static class LiveSender
         return counts;
     }
 
-    private static async Task PostAsync(HttpClient http, string text, Action<string> inc, CancellationToken ct)
+    private static async Task PostAsync(HttpClient http, string text, SourceCredentials creds, Action<string> inc, CancellationToken ct)
     {
         try
         {
-            using var content = new StringContent(text, Encoding.UTF8, "text/plain");
-            using var response = await http.PostAsync("/v1/events", content, ct);
+            // Her gönderim yeni bir nonce ile imzalanır; bilerek gönderilen kopyalar da API'nin tekilleştirmesine ulaşır.
+            using var request = creds.SignedPost("/v1/events", Encoding.UTF8.GetBytes(text), "text/plain; charset=utf-8");
+            using var response = await http.SendAsync(request, ct);
             switch ((int)response.StatusCode)
             {
                 case 202:
@@ -97,6 +99,12 @@ public static class LiveSender
                     break;
                 case 422:
                     inc("REJECTED");
+                    break;
+                case 401:
+                    inc("UNAUTHORIZED (imza reddedildi)");
+                    break;
+                case 403:
+                    inc("FORBIDDEN (kaynağın izni yok)");
                     break;
                 default:
                     inc($"HTTP_{(int)response.StatusCode}");

@@ -14,12 +14,7 @@ namespace AeroBag.IntegrationTests;
 /// <summary>Faz 4 kimlik doğrulama ve yetki testleri: gerçek API, gerçek PostgreSQL (Testcontainers).</summary>
 public sealed class AuthTests(PostgresFixture fx) : IClassFixture<PostgresFixture>, IDisposable
 {
-    private readonly WebApplicationFactory<Program> _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-    {
-        b.UseSetting("ConnectionStrings:Default", fx.ConnectionString);
-        b.UseSetting("Ml:BaseUrl", "");
-        b.UseSetting("Auth:SigningKey", "integration-test-signing-key-0123456789abcdef");
-    });
+    private readonly WebApplicationFactory<Program> _factory = TestApi.Create(fx);
 
     public void Dispose() => _factory.Dispose();
 
@@ -32,7 +27,7 @@ public sealed class AuthTests(PostgresFixture fx) : IClassFixture<PostgresFixtur
         var tag = NewTag();
         var pnr = NewPnr();
         var bsm = $"BSM\n.V/1LAYT\n.F/{flightNo}/22OCT/AYT/Y\n.N/{tag}001\n.W/K/1/18\n.P/YILMAZ/AYSE\n.L/{pnr}\nENDBSM";
-        var resp = await client.PostAsync("/v1/events", new StringContent(bsm, Encoding.UTF8, "text/plain"));
+        var resp = await client.SendAsync(TestApi.Signed("/v1/events", bsm));
         Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
         return (pnr, tag);
     }

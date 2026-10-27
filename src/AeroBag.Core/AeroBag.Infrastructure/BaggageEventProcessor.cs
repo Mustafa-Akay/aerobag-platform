@@ -33,10 +33,10 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
             return ProcessResult.Reject(mapError ?? "Eşlenemedi.");
         }
 
-        return await StoreAsync(ev!, rawText ?? string.Empty, received, ct);
+        return await StoreAsync(ev!, rawText ?? string.Empty, received, source, ct);
     }
 
-    private async Task<ProcessResult> StoreAsync(BaggageEvent ev, string rawText, DateTimeOffset received, CancellationToken ct)
+    private async Task<ProcessResult> StoreAsync(BaggageEvent ev, string rawText, DateTimeOffset received, string source, CancellationToken ct)
     {
         var flightId = $"{ev.FlightNumber}-{ev.FlightDate:yyyyMMdd}";
 
@@ -167,13 +167,13 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
         await using (var evCmd = Cmd(conn, tx,
                          """
                          INSERT INTO baggage_events (event_id, idempotency_key, bag_id, message_type, from_state, to_state,
-                                                     outcome, scanner_id, raw_text, payload, occurred_at_utc, received_at_utc)
-                         VALUES (@eid, @ik, @bid, @mt, @from, @to, @oc, @sc, @raw, @pl, @occ, @rec)
+                                                     outcome, scanner_id, source, raw_text, payload, occurred_at_utc, received_at_utc)
+                         VALUES (@eid, @ik, @bid, @mt, @from, @to, @oc, @sc, @src, @raw, @pl, @occ, @rec)
                          """,
                          P("eid", Guid.NewGuid()), P("ik", ev.IdempotencyKey), P("bid", bagId), P("mt", ev.MessageType),
                          P("from", current is null ? null : StateNames.ToDb(current.Value)),
                          P("to", StateNames.ToDb(stale ? ev.TargetState : newState)),
-                         P("oc", outcome), P("sc", ev.ScanPoint), P("raw", rawText), J("pl", payload),
+                         P("oc", outcome), P("sc", ev.ScanPoint), P("src", source.Length > 32 ? source[..32] : source), P("raw", rawText), J("pl", payload),
                          P("occ", ev.OccurredAtUtc), P("rec", received)))
         {
             await evCmd.ExecuteNonQueryAsync(ct);

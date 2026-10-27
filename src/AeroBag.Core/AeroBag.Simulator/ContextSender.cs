@@ -1,11 +1,13 @@
-using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace AeroBag.Simulator;
 
 /// <summary>Gerçek kurulumda AODB'nin yaptığı işi taklit eder: uçuş bağlamını (ML özellikleri) API'ye gönderir.</summary>
 public static class ContextSender
 {
-    public static async Task<int> SendAsync(string apiBase, IEnumerable<FlightInfo> flights, CancellationToken ct)
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    public static async Task<int> SendAsync(string apiBase, IEnumerable<FlightInfo> flights, SourceCredentials creds, CancellationToken ct)
     {
         using var http = new HttpClient { BaseAddress = new Uri(apiBase), Timeout = TimeSpan.FromSeconds(10) };
         var ok = 0;
@@ -26,7 +28,9 @@ public static class ContextSender
             };
             try
             {
-                using var resp = await http.PostAsJsonAsync("/v1/flights/context", body, ct);
+                var json = JsonSerializer.SerializeToUtf8Bytes(body, Json);
+                using var req = creds.SignedPost("/v1/flights/context", json, "application/json; charset=utf-8");
+                using var resp = await http.SendAsync(req, ct);
                 if (resp.IsSuccessStatusCode) ok++;
             }
             catch (HttpRequestException)

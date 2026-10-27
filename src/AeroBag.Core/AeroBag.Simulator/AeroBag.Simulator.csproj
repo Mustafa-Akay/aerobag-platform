@@ -2,4 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AeroBag.Application\AeroBag.Application.csproj" />
+  </ItemGroup>
 </Project>

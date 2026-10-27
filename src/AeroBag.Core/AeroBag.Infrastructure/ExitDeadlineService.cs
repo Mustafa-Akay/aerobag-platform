@@ -76,9 +76,9 @@ public sealed class ExitDeadlineService(NpgsqlDataSource db, TimeProvider clock)
             await ExecAsync(conn, tx,
                 """
                 INSERT INTO baggage_events (event_id, idempotency_key, bag_id, message_type, from_state, to_state, outcome,
-                                            scanner_id, raw_text, payload, occurred_at_utc, received_at_utc)
+                                            scanner_id, source, raw_text, payload, occurred_at_utc, received_at_utc)
                 VALUES (@eid, @ik, @bid, 'SYSTEM', 'CLAIMED_FROM_BELT', 'EXIT_OVERDUE', 'APPLIED',
-                        'exit-worker', NULL, @pl, @occ, @rec)
+                        'exit-worker', 'system', NULL, @pl, @occ, @rec)
                 """,
                 new NpgsqlParameter("eid", NpgsqlDbType.Uuid) { Value = Guid.NewGuid() },
                 new NpgsqlParameter("ik", NpgsqlDbType.Varchar) { Value = $"exit-overdue:{d.BagId}" },

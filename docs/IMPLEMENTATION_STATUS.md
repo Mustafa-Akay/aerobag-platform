@@ -40,7 +40,7 @@ Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, �
 
 ## Bilinen eksikler ve riskler
 
-1. **Mesaj alma uçları imzasız:** `/v1/events` ve `/v1/flights/context` hâlâ herkese açık; sahte kaynaktan olay gönderilebilir. Kaynak başına HMAC imzası Faz 4'ün sonraki adımıdır. Personel ve yolcu tarafı JWT ile korunuyor (aşağıda "Faz 4.1").
+1. **Kimlik doğrulama:** personel ve yolcu tarafı JWT ile (aşağıda "Faz 4.1"), mesaj kaynakları HMAC imzasıyla (aşağıda "Faz 4.2") korunuyor. Olay günlüğü henüz veritabanı düzeyinde yalnızca eklemeli değil; uygulama hesabı UPDATE/DELETE yapabilir.
 2. **Çıkışta yolcu eşleştirmesi yok.** Çıkış okuması ve süre dolumu çalışıyor (aşağıda "Faz 4, ilk dilim"), ama bavul ile sunulan PNR karşılaştırılmıyor; yanlış kişi kontrolü (`EXIT_REVIEW`) yok. Faz 4.
 3. **Bantta takılı bagaj tespiti yok.** "Alındı" mesajı düşerse bagaj sonsuza dek `ON_CAROUSEL` kalır; çıkış süresi bunu çözmez çünkü sayaç alınma anında başlar.
 4. **AODB bağlamı simülatörden gelir:** gövde tipi, hava, mesafeler ve yer hizmeti firması `POST /v1/flights/context` ile verilir; gerçek bir uçuş bilgi sistemi yok. Bant numarası hâlâ saklanmıyor.
@@ -130,3 +130,19 @@ Bilinen sınırlar:
 - WebSocket jetonu sorgu parametresiyle (`access_token`) gelir; ters vekil sunucu kayıtlarında görünebilir.
 - `sessionStorage`'daki jeton bir XSS açığında okunabilir; HttpOnly çerez kullanılmadı.
 - Demo kullanıcıları ve parolaları kodda ve README'de yazılıdır; yapılandırmada `Auth:Users` verilince devre dışı kalır.
+
+## Faz 4.2: mesaj kaynaklarının imzası
+
+- **Uçlar:** `/v1/events` (kapsam `events`) ve `/v1/flights/context` (kapsam `context`) yalnızca imzalı istek kabul eder. Kapı sensörü için `gate` kapsamı ayrıldı.
+- **İmza:** başlıklar `X-AeroBag-Source`, `X-AeroBag-Timestamp` (unix saniye), `X-AeroBag-Nonce`, `X-AeroBag-Signature`. İmzalanan metin `v1\n{zaman}\n{nonce}\n{METHOD}\n{yol}\n{gövdenin SHA-256'sı}`, imza `v1=` + HMAC-SHA256 (kaynağın anahtarı). Biçim dile bağlı değildir; birim testinde Python ile üretilmiş bir örnek doğrulanır.
+- **Kontroller:** bilinmeyen kaynak, yanlış anahtar, değiştirilmiş gövde, ±5 dakika dışındaki zaman damgası ve aynı nonce'un ikinci kez kullanılması 401; kaynağın izni olmayan uç 403; 64 KB üstü gövde 413. Hatalı imzada hangi kontrolün başarısız olduğu söylenmez.
+- **Kaynak kaydı:** her olay satırında imzası doğrulanan kaynak adı (`baggage_events.source`) saklanır; çıkış süresi worker'ının yazdığı olaylarda `system`. Şema değişti: `docker compose down -v` gerekir.
+- **Simülatör:** her isteği yeni bir nonce ile imzalar (`--source-id`, `--source-secret` ya da `AEROBAG_SOURCE_SECRET`). Bilerek gönderilen kopya mesajlar yine API'nin tekilleştirmesine ulaşır. Reddedilen istekler sonuç özetinde `UNAUTHORIZED` / `FORBIDDEN` olarak sayılır.
+- **Testler:** imza biçimi, değişen her parçanın imzayı bozması, nonce ve kaynak adı biçimi, simülatör isteğinin doğrulanması (birim); imzasız, yanlış anahtar, bilinmeyen kaynak, değiştirilmiş gövde, zaman penceresi dışı, tekrar oynatma, yeni nonce ile kopya, kapsam dışı uç (entegrasyon, gerçek API).
+
+Bilinen sınırlar:
+- Nonce önbelleği bellektedir ve tek örnek varsayar; API yeniden başlarsa son 5 dakikanın nonce'ları unutulur (olaylar yine de idempotent olduğu için tekrar oynatılan olay durumu değiştirmez).
+- Ortak gizli anahtar kullanılır (simetrik). Anahtar döndürme ve kaynak başına birden çok anahtar yok. Asimetrik imza ya da mTLS daha güçlü bir seçenektir.
+- Demo kaynağının anahtarı kodda ve README'de yazılıdır; yapılandırmada `Ingest:Sources` verilince kabul edilmez.
+- Alma uçlarında hız sınırı yok; imzasız istekler gövde okunmadan reddedilir, imzalı ama yoğun gönderime karşı ayrı bir sınır eklenmedi.
+

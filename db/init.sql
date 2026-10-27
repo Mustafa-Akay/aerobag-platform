@@ -56,6 +56,7 @@ CREATE TABLE baggage_events (
   to_state         VARCHAR(32)  NOT NULL,
   outcome          VARCHAR(16)  NOT NULL,          -- APPLIED, IGNORED_STALE, ANOMALY
   scanner_id       VARCHAR(32),
+  source           VARCHAR(32)  NOT NULL,          -- imzası doğrulanan mesaj kaynağı (örn. simulator) ya da 'system'
   raw_text         TEXT,
   payload          JSONB        NOT NULL,
   occurred_at_utc  TIMESTAMPTZ  NOT NULL,

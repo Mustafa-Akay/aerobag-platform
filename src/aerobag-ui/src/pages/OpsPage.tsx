@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { getFlights, getFlightSla, type FlightSla, type FlightSummary } from "../api";
+import { ApiError, getFlights, getFlightSla, type FlightSla, type FlightSummary } from "../api";
+import { clearStaff, loadStaff, type StaffSession } from "../auth";
+import { StaffLogin } from "../components/StaffLogin";
 import { SlaPanel } from "../components/SlaPanel";
 import { clockTime, decimalMinutes } from "../format";
 import { useCoalescedTick, useLive } from "../live";
@@ -7,14 +9,35 @@ import { useCoalescedTick, useLive } from "../live";
 const POLL_FAST_MS = 3000;
 const POLL_SLOW_MS = 20000;
 
+const ROLE_TEXT: Record<StaffSession["role"], string> = { ops: "Operasyon", security: "Güvenlik" };
+
 export function OpsPage() {
+  const [session, setSession] = useState<StaffSession | null>(() => loadStaff());
+  const [notice, setNotice] = useState<string | null>(null);
+
+  if (!session) {
+    return <StaffLogin notice={notice} onLogin={(s) => { setNotice(null); setSession(s); }} />;
+  }
+
+  const end = (message: string | null) => {
+    clearStaff();
+    setNotice(message);
+    setSession(null);
+  };
+
+  return <OpsDashboard session={session} onExpired={() => end("Oturumunuzun süresi doldu. Tekrar giriş yapın.")} onLogout={() => end(null)} />;
+}
+
+function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession; onExpired: () => void; onLogout: () => void }) {
   const [flights, setFlights] = useState<FlightSummary[] | null>(null);
   const [sla, setSla] = useState<FlightSla[] | null>(null);
   const [error, setError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const [tick, signal] = useCoalescedTick(1000);
-  const live = useLive({ kind: "ops" }, "flightsChanged", signal);
+  const live = useLive({ kind: "ops" }, session.token, "flightsChanged", signal);
+  const expired = useRef(onExpired);
+  expired.current = onExpired;
   const pollMs = useRef(POLL_FAST_MS);
   pollMs.current = live === "live" ? POLL_SLOW_MS : POLL_FAST_MS;
 
@@ -23,16 +46,21 @@ export function OpsPage() {
     let timer: number | undefined;
     const run = async () => {
       try {
-        setFlights(await getFlights(controller.signal));
+        setFlights(await getFlights(session.token, controller.signal));
         try {
-          setSla(await getFlightSla(controller.signal));
+          setSla(await getFlightSla(session.token, controller.signal));
         } catch {
           if (!controller.signal.aborted) setSla(null);
         }
         setError(false);
         setUpdatedAt(new Date());
-      } catch {
-        if (!controller.signal.aborted) setError(true);
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+          expired.current();
+          return;
+        }
+        setError(true);
       }
       if (!controller.signal.aborted) timer = window.setTimeout(run, pollMs.current);
     };
@@ -41,11 +69,19 @@ export function OpsPage() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [tick]);
+  }, [tick, session.token]);
 
   return (
     <div>
-      <h1 className="font-display text-5xl font-bold leading-[0.95]">Operasyon panosu</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h1 className="font-display text-5xl font-bold leading-[0.95]">Operasyon panosu</h1>
+        <p className="text-sm text-steel">
+          {ROLE_TEXT[session.role]} rolüyle giriş yapıldı.{" "}
+          <button type="button" onClick={onLogout} className="font-semibold text-ink underline underline-offset-4">
+            Oturumu kapat
+          </button>
+        </p>
+      </div>
       <p className="mt-2 text-steel">Uçuş başına bagaj sayıları, ilk bagaj süresi ve sıra dışı olaylar. "Alındı" banttan alınan tüm bagajları sayar; çıkış sütunları bunların alt kümesidir. "Çıkış okunmadı" bir sonuç değil, inceleme gerektiren durumdur.</p>
 
       {error && (

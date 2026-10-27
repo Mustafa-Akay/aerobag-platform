@@ -40,7 +40,7 @@ Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, �
 
 ## Bilinen eksikler ve riskler
 
-1. **Kimlik doğrulama yok:** `/v1/events`, `/v1/flights` ve `/hubs/live` herkese açık. Yalnızca yerel demo için uygundur. Hub'da bagaj etiketini bilen o bagajın "değişti" sinyalini alabilir (içerik görmez). Faz 4.
+1. **Mesaj alma uçları imzasız:** `/v1/events` ve `/v1/flights/context` hâlâ herkese açık; sahte kaynaktan olay gönderilebilir. Kaynak başına HMAC imzası Faz 4'ün sonraki adımıdır. Personel ve yolcu tarafı JWT ile korunuyor (aşağıda "Faz 4.1").
 2. **Çıkışta yolcu eşleştirmesi yok.** Çıkış okuması ve süre dolumu çalışıyor (aşağıda "Faz 4, ilk dilim"), ama bavul ile sunulan PNR karşılaştırılmıyor; yanlış kişi kontrolü (`EXIT_REVIEW`) yok. Faz 4.
 3. **Bantta takılı bagaj tespiti yok.** "Alındı" mesajı düşerse bagaj sonsuza dek `ON_CAROUSEL` kalır; çıkış süresi bunu çözmez çünkü sayaç alınma anında başlar.
 4. **AODB bağlamı simülatörden gelir:** gövde tipi, hava, mesafeler ve yer hizmeti firması `POST /v1/flights/context` ile verilir; gerçek bir uçuş bilgi sistemi yok. Bant numarası hâlâ saklanmıyor.
@@ -114,3 +114,19 @@ Tasarımdan farklar ve bilinen sınırlar:
 - ML kapalıyken tahmin alanları boş, durum UNKNOWN olur; gerçekleşen ya da süresi dolmuş durumlar yine raporlanır.
 - ARCHITECTURE 6.2'deki `suggestion` (kaynak artırımı önerisi) uygulanmadı.
 - Bu olasılıkların kalibrasyonu (örneğin "%60 dediğimiz uçuşların kaçı gerçekten aştı") henüz ayrıca ölçülmedi.
+
+## Faz 4.1: JWT ile kimlik doğrulama ve roller
+
+- **Roller:** `passenger`, `ops`, `security`. Jetonlar HS256 imzalı, kısa ömürlü (personel 15 dk, yolcu 30 dk), `iss`/`aud`/süre doğrulanır, saat kayması payı 30 sn.
+- **Personel girişi:** `POST /v1/auth/token` (IP başına dakikada 10). Parolalar PBKDF2-SHA256 (600.000 yineleme) ile saklanır, karşılaştırma sabit sürelidir. Yanlış kullanıcı adı ve yanlış parola aynı yanıtı verir; bilinmeyen kullanıcıda da aynı maliyette doğrulama yapılır.
+- **Yolcu jetonu:** `/v1/lookup` (PNR + soyad) başarılıysa yanıtta yolcu jetonu döner. Jetonda kişisel veri yoktur, yalnızca o sorgudaki bagaj etiketleri vardır.
+- **Uç başına politika:** `/v1/flights` ve `/v1/flights/sla` yalnızca personel. `/v1/bags/{etiket}` personel ya da jetonunda o etiket bulunan yolcu; yetkisiz bagaj için 404 (varlığı sızdırılmaz). Canlı kanal (`/hubs/live`) jeton ister; `JoinOps` yalnızca personel, `JoinBags` yalnızca yetkili etiketler.
+- **Arayüz:** operasyon panosu giriş formu gösterir; jeton sekme oturumunda (`sessionStorage`) tutulur, 401/403 gelince oturum kapanır.
+- **Testler:** parola özeti birim testleri; gerçek API ve PostgreSQL ile yetkisiz erişim, yanlış rol, başka bagaja erişim, değiştirilmiş ve başka anahtarla imzalanmış jeton, canlı kanal grup yetkisi.
+
+Bilinen sınırlar:
+- İmza anahtarı verilmezse her açılışta rastgele üretilir; çok örnekli kurulumda ortak anahtar gerekir. Anahtar döndürme (rotation) yok.
+- Yenileme jetonu (refresh token) ve jeton iptali yok; jeton süresi dolana kadar geçerlidir. Canlı kanal bağlantısı kurulduktan sonra jeton süresi dolsa da açık kalır.
+- WebSocket jetonu sorgu parametresiyle (`access_token`) gelir; ters vekil sunucu kayıtlarında görünebilir.
+- `sessionStorage`'daki jeton bir XSS açığında okunabilir; HttpOnly çerez kullanılmadı.
+- Demo kullanıcıları ve parolaları kodda ve README'de yazılıdır; yapılandırmada `Auth:Users` verilince devre dışı kalır.

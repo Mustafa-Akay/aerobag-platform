@@ -18,7 +18,12 @@ export type PassengerBag = {
 export type LookupResult = {
   asOfUtc: string;
   bags: PassengerBag[];
+  /** Yalnızca bu sorgudaki bagajlar için canlı kanala erişim veren kısa ömürlü yolcu jetonu. */
+  accessToken: string;
+  expiresInSec: number;
 };
+
+export type LoginResult = { accessToken: string; expiresInSec: number; role: "ops" | "security" };
 
 export type FlightSummary = {
   flightId: string;
@@ -68,8 +73,8 @@ export class ApiError extends Error {
   }
 }
 
-async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(url, { signal });
+async function getJson<T>(url: string, signal?: AbortSignal, token?: string): Promise<T> {
+  const response = await fetch(url, { signal, headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   if (!response.ok) {
     throw new ApiError(response.status);
   }
@@ -81,10 +86,22 @@ export function lookup(pnr: string, surname: string, signal?: AbortSignal): Prom
   return getJson<LookupResult>(`/v1/lookup?${query}`, signal);
 }
 
-export function getFlights(signal?: AbortSignal): Promise<FlightSummary[]> {
-  return getJson<FlightSummary[]>("/v1/flights", signal);
+export async function login(username: string, password: string): Promise<LoginResult> {
+  const response = await fetch("/v1/auth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status);
+  }
+  return (await response.json()) as LoginResult;
 }
 
-export function getFlightSla(signal?: AbortSignal): Promise<FlightSla[]> {
-  return getJson<FlightSla[]>("/v1/flights/sla", signal);
+export function getFlights(token: string, signal?: AbortSignal): Promise<FlightSummary[]> {
+  return getJson<FlightSummary[]>("/v1/flights", signal, token);
+}
+
+export function getFlightSla(token: string, signal?: AbortSignal): Promise<FlightSla[]> {
+  return getJson<FlightSla[]>("/v1/flights/sla", signal, token);
 }

@@ -15,23 +15,27 @@ async function join(connection: HubConnection, target: LiveTarget): Promise<void
 
 /**
  * Sunucudan gelen içeriksiz bildirimi dinler. Bildirim gelince onSignal çağrılır; veriyi istemci yeniden çeker.
- * target null ise bağlanmaz. Bağlantı kopup geri gelirse gruplara yeniden katılır ve bir yenileme tetikler.
+ * target ya da token null ise bağlanmaz. Bağlantı kopup geri gelirse gruplara yeniden katılır ve bir yenileme tetikler.
+ * Jeton her istekte en güncel değerden okunur; jeton yenilenince bağlantı yeniden kurulmaz.
  */
-export function useLive(target: LiveTarget | null, event: string, onSignal: () => void): LiveStatus {
+export function useLive(target: LiveTarget | null, token: string | null, event: string, onSignal: () => void): LiveStatus {
   const [status, setStatus] = useState<LiveStatus>("off");
   const handler = useRef(onSignal);
   handler.current = onSignal;
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
+  const hasToken = token !== null;
   const key = target === null ? "" : target.kind === "ops" ? "ops" : `bags:${[...target.tags].sort().join(",")}`;
 
   useEffect(() => {
-    if (target === null) {
+    if (target === null || !hasToken) {
       setStatus("off");
       return;
     }
 
     let cancelled = false;
     const connection = new HubConnectionBuilder()
-      .withUrl("/hubs/live")
+      .withUrl("/hubs/live", { accessTokenFactory: () => tokenRef.current ?? "" })
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
       .build();
@@ -64,7 +68,7 @@ export function useLive(target: LiveTarget | null, event: string, onSignal: () =
     };
     // target içeriği key ile temsil edilir.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, event]);
+  }, [key, event, hasToken]);
 
   return status;
 }

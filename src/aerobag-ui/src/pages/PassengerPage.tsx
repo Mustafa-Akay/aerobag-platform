@@ -51,7 +51,7 @@ export function PassengerPage() {
 
   const [tick, signal] = useCoalescedTick((60_000 / LOOKUP_LIMIT_PER_MIN) * 1.5);
   const tags = useMemo(() => result?.bags.map((b) => b.bagTag) ?? [], [result]);
-  const live = useLive(tags.length > 0 ? { kind: "bags", tags } : null, "bagChanged", signal);
+  const live = useLive(tags.length > 0 ? { kind: "bags", tags } : null, result?.accessToken ?? null, "bagChanged", signal);
   const pollMs = useRef(POLL_FAST_MS);
   pollMs.current = live === "live" ? POLL_SLOW_MS : POLL_FAST_MS;
 

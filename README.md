@@ -55,6 +55,8 @@ npm install
 npm run dev                                            # http://localhost:5173
 ```
 
+Operasyon panosu giriş ister. Demo kullanıcıları (yalnızca yerel demo): `ops` / `ops-demo-2026` ve `security` / `security-demo-2026`. Gerçek bir kurulumda kullanıcılar `Auth__Users__0__Username`, `Auth__Users__0__PasswordHash`, `Auth__Users__0__Role` ile, imza anahtarı `Auth__SigningKey` (en az 32 bayt) ile verilir. İmza anahtarı verilmezse API her açılışta rastgele bir anahtar üretir ve açık oturumlar yeniden başlatmada düşer.
+
 Simülatör (ayrı terminal). Başlangıçta örnek PNR ve soyadları yazdırır, bunlarla yolcu sayfasında sorgu yapabilirsiniz:
 
 ```powershell
@@ -93,10 +95,10 @@ Birim testleri Docker gerektirmez. Entegrasyon testleri Testcontainers ile gerç
 ## Sınırlar ve açık işler
 
 - Sonuçlar yalnızca simülasyonla doğrulandı; model ve simülatör aynı üretici ailesinden geliyor, bu yüzden sonuçlar iyimser olabilir. Ölçümler uçuş düzeyindedir (`docs/EVALUATION.md`). İniş öncesi bavul düzeyindeki ML penceresi bir basitleştirmedir ve ayrıca ölçülmemiştir.
-- `/v1/events`, `/v1/flights` ve `/hubs/live` uçlarında kimlik doğrulama yok; yalnızca yerel demo içindir.
+- Operasyon uçları (`/v1/flights`, `/v1/flights/sla`) ve canlı kanal JWT ister; yolcu jetonu yalnızca kendi bagajlarına erişir. Mesaj alma uçları (`/v1/events`, `/v1/flights/context`) henüz imza istemiyor (Faz 4'ün sonraki adımı).
 - Depodaki gizli anahtar ve veritabanı parolası geliştirme varsayılanlarıdır. Gerçek bir kurulumda ortam değişkeniyle (`Security__LookupKeySecret`, `ConnectionStrings__Default`) verilmelidir.
 - Çıkış doğrulama (bagaj-yolcu eşleştirme, yanlış kişi kontrolü) henüz yok; mevcut çıkış okuması yalnızca "okundu" bilgisidir. Süre dolumu sanal saatle çalışır (olay akışı durursa durur).
 - Havalimanı bağlamı (gövde tipi, hava, mesafeler, yer hizmeti firması) gerçek bir AODB'den değil, simülatörden gelir. ML servisinin düzeltme durumu bellektedir ve yeniden başlayınca sıfırlanır; servis kimlik doğrulaması istemez, yalnızca yerel makineye açıktır.
 - Bantta takılı bagaj yalnızca sayılır, durumu değiştirilmez.
 
-Yol haritası: çıkış doğrulama / yolcu eşleştirme, kimlik doğrulama.
+Yol haritası (Faz 4): mesaj kaynaklarının imzalanması, yalnızca eklemeli olay günlüğü, çıkış doğrulama / yolcu eşleştirme, tehdit modeli ve KVKK notu.

@@ -28,6 +28,14 @@ builder.Services.AddSingleton<PassengerQueries>();
 builder.Services.AddSingleton<OpsQueries>();
 builder.Services.AddSingleton<SlaQueries>();
 
+// ExitGuard (Faz 4): çıkış kapısında bavul-PNR eşleştirmesi. Özellik bayrağı: ExitGuard:Enabled (varsayılan açık).
+var exitGuard = new ExitGuardOptions(
+    builder.Configuration.GetValue("ExitGuard:Enabled", true),
+    builder.Configuration.GetValue("ExitGuard:MinSignalQuality", AeroBag.Application.ExitGuard.ExitGuardRules.DefaultMinSignalQuality));
+builder.Services.AddSingleton(exitGuard);
+builder.Services.AddSingleton<GateService>();
+builder.Services.AddSingleton<SecurityReviews>();
+
 // ML tahmin servisi (Faz 2). Ml:BaseUrl boşsa kapalıdır; servis erişilemezse sistem taban çizgisine düşer.
 var mlUrl = builder.Configuration["Ml:BaseUrl"] ?? "http://localhost:8000";
 if (string.IsNullOrWhiteSpace(mlUrl))
@@ -218,6 +226,8 @@ app.MapPost("/v1/flights/context", async (FlightContext body, FlightContextStore
     await store.UpsertAsync(body, ct);
     return Results.Accepted();
 }).WithMetadata(new RequireSourceScope(IngestScopes.Context));
+
+app.MapExitGuard(exitGuard);
 
 app.MapHub<LiveHub>("/hubs/live");
 

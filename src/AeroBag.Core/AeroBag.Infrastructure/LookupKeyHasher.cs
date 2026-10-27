@@ -23,6 +23,13 @@ public sealed class LookupKeyHasher
     public byte[] Compute(string pnr, string surname) =>
         HMACSHA256.HashData(_secret, Encoding.UTF8.GetBytes($"{pnr.Trim().ToUpperInvariant()}|{NormalizeSurname(surname)}"));
 
+    /// <summary>
+    /// Yalnızca PNR'ın özeti (soyad yok). Çıkışta "aynı rezervasyondaki yolcular ortak çıkabilir" kuralı için.
+    /// Önek ("PNR|") arama anahtarıyla karışmasını önler.
+    /// </summary>
+    public byte[] ComputePnr(string pnr) =>
+        HMACSHA256.HashData(_secret, Encoding.UTF8.GetBytes($"PNR|{pnr.Trim().ToUpperInvariant()}"));
+
     /// <summary>Büyük harfe çevirir; harf olmayan karakterleri (boşluk, tire, kesme) atar.</summary>
     public static string NormalizeSurname(string surname) =>
         new(surname.Where(char.IsLetter).Select(char.ToUpperInvariant).ToArray());

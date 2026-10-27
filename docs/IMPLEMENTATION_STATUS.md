@@ -9,7 +9,7 @@ Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, �
 | 1. Çekirdek | Tamam |
 | 2. Makine öğrenmesi | Tamam (bkz. aşağıda ve `EVALUATION.md`) |
 | 3. Dayanıklılık | Ölçüt karşılandı; Kafka uyumlu broker yok (bkz. "Faz 3 durumu") |
-| 4. Güvenlik ve çıkış doğrulama | Başladı: çıkış okuması ve süre dolumu var; PNR eşleştirme, tehdit modeli, KVKK notu, kimlik doğrulama yok |
+| 4. Güvenlik ve çıkış doğrulama | Sürüyor: kimlik doğrulama (JWT), kaynak imzası, yalnızca eklemeli günlük, ExitGuard arka ucu tamam; simülatör kapı paketleri, yanlış alarm ölçümü, arayüz, tehdit modeli ve KVKK notu kaldı |
 | 5. Opsiyonel donanım demosu | Başlanmadı |
 
 ## Çalışan parçalar
@@ -159,4 +159,18 @@ Bilinen sınırlar:
 - Süper kullanıcı tetikleyiciyi kapatabilir ya da tabloyu silebilir. Bu katman kazara ya da uygulama üzerinden yapılan değişikliği engeller; veritabanı yöneticisine karşı koruma değildir. Ona karşı olay zinciri özeti (hash chain) ya da harici, değiştirilemez bir kayıt deposu gerekir; yapılmadı.
 - Daha önce oluşturulmuş veritabanlarındaki eski ham metinler bu değişiklikle temizlenmez; demo verisi olduğu için `docker compose down -v` ile sıfırlanır.
 - Saklama süresi dolan kişisel verinin silinmesi (KVKK) için uygulama rolüne ileride yalnızca o işe özel bir yetki verilmesi gerekecek.
+
+## Faz 4.4 (ilk dilim): ExitGuard arka ucu
+
+- **Uç:** `POST /v1/gate/scans` (imzalı, kapsam `gate`). Paket ARCHITECTURE.md 4.3'teki gibidir: kapı, zaman, okunan etiketler (en çok 10), sunulan PNR, yöntem, sinyal kalitesi. Özellik bayrağı `ExitGuard:Enabled` (varsayılan açık); kapalıyken uç yoktur (404) ve eski çıkış okuması (BPM `EXIT`) aynen çalışır.
+- **Kural (saf fonksiyon, `ExitGuardRules`):** sunulan PNR'ın özeti bavulun yolcusunun PNR özetiyle aynıysa `CLEARED_OWNER` (bavul `EXIT_CLEARED`). Eşleştirme PNR düzeyindedir: aynı rezervasyondaki yolcular birbirinin bavulunu alabilir, soyad karşılaştırılmaz. Uyuşmazsa `REVIEW_MISMATCH` (bavul `EXIT_REVIEW`, sessiz inceleme kaydı; kapıda alarm yok). Doğrulama yoksa, sinyal 0,6'nın altındaysa ya da bavulun sahip bilgisi yoksa `NO_DECISION`: durum değişmez, alarm üretilmez, çıkış süresi işlemeye devam eder. Bant öncesi bavul `OUT_OF_SEQUENCE`, sistemde olmayan etiket `UNKNOWN_TAG` (ikisi de inceleme kaydı, durum değişmez). Kapanmış bavul `ALREADY_CLOSED`.
+- **Saklanan veri:** sunulan PNR ve soyad hiçbir tabloya yazılmaz; yalnızca bellekte HMAC özeti alınıp karşılaştırılır. Yolcu tablosunda PNR'ın ayrı bir HMAC özeti (`pnr_key`, arama anahtarından farklı önekle) tutulur. Her okuma kararıyla birlikte `gate_reads`'e (yalnızca eklemeli, denetim izi), durum değiştiren kararlar olay günlüğüne ve outbox'a yazılır. Aynı paket ikinci kez gelirse `DUPLICATE`.
+- **Güvenlik ekranı uçları:** `GET /v1/security/reviews` (açık kayıtlar; `?status=all` tümü) ve `POST /v1/security/reviews/{id}/resolve` (`CONFIRMED` ya da `FALSE_ALARM`, not en çok 200 karakter). Yalnızca `security` rolü; `ops` rolü 403 alır. Kayıtta kişisel veri yoktur: etiket, uçuş, kapı, zaman, gerekçe, kimin sonuçlandırdığı.
+- **Testler:** karar kuralı (birim); sahip, aynı rezervasyon, başkası, zayıf sinyal ve doğrulamasız okuma, bilinmeyen etiket, bant öncesi okuma, tekrar gelen paket, imza ve kapsam, geçersiz paket, bayrak kapalı, sunulan PNR'ın hiçbir tabloda bulunmaması, inceleme kaydını yalnızca güvenliğin görüp sonuçlandırabilmesi (entegrasyon).
+
+Bilinen sınırlar:
+- Kuralın kendisi deterministiktir; yanlış alarm ve kaçırma oranları sensörün okuma hatalarına bağlıdır. Bunlar sonraki dilimde simülatörle ölçülecek ve yalnızca varsayılan hata oranları altında geçerli olacak.
+- PNR'ı paylaşan herkes (aynı rezervasyon) birbirinin bavulunu çıkarabilir; bu bilinçli bir kuraldır ve PNR'ı ele geçiren biri için açık bir yoldur.
+- Yolcuya bildirim ve güvenlik ekranı arayüzü henüz yok (sonraki dilim). İnceleme kayıtları canlı kanaldan bildirilmiyor, ekran yoklama ile okuyacak.
+- Şema değişti: `docker compose down -v` gerekir.
 

@@ -26,6 +26,7 @@ CREATE TABLE passengers (
   passenger_id  UUID PRIMARY KEY,
   flight_id     VARCHAR(40) NOT NULL REFERENCES flights(flight_id),
   lookup_key    BYTEA       NOT NULL,   -- HMAC-SHA256(gizli_anahtar, upper(pnr) || '|' || normalize(soyad))
+  pnr_key       BYTEA       NOT NULL,   -- HMAC-SHA256(gizli_anahtar, 'PNR|' || upper(pnr)); çıkışta aynı PNR'daki yolcular (Faz 4)
   display_name  VARCHAR(64),            -- demoda takma ad; gerçek kurulumda boş
   cabin_class   CHAR(1)     NOT NULL,
   UNIQUE (flight_id, lookup_key)
@@ -79,7 +80,7 @@ CREATE INDEX idx_outbox_pending ON outbox_messages(seq) WHERE processed_at_utc I
 CREATE TABLE exit_deadlines (
   bag_id      UUID PRIMARY KEY REFERENCES bags(bag_id),
   due_at_utc  TIMESTAMPTZ NOT NULL,
-  status      VARCHAR(12) NOT NULL DEFAULT 'PENDING'    -- PENDING, CLEARED, OVERDUE
+  status      VARCHAR(12) NOT NULL DEFAULT 'PENDING'    -- PENDING, CLEARED, OVERDUE, REVIEW
 );
 CREATE INDEX idx_exit_deadlines_due ON exit_deadlines(due_at_utc) WHERE status = 'PENDING';
 
@@ -113,6 +114,42 @@ CREATE TABLE ml_bag_outcomes (
   reported_at_utc  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Faz 4.4: çıkış kapısı okumaları (ExitGuard). Her okuma, kararı ne olursa olsun buraya yazılır (denetim izi).
+-- Sunulan PNR ve soyad SAKLANMAZ; yalnızca karar ve gerekçe tutulur.
+CREATE TABLE gate_reads (
+  read_id          UUID PRIMARY KEY,
+  idempotency_key  VARCHAR(160) NOT NULL UNIQUE,
+  gate_id          VARCHAR(32)  NOT NULL,
+  bag_tag          CHAR(10)     NOT NULL,
+  bag_id           UUID REFERENCES bags(bag_id),      -- bilinmeyen etikette boş
+  decision         VARCHAR(20)  NOT NULL,             -- CLEARED_OWNER, REVIEW_MISMATCH, NO_DECISION, ALREADY_CLOSED, OUT_OF_SEQUENCE, UNKNOWN_TAG
+  reason           VARCHAR(24)  NOT NULL,
+  signal_quality   REAL,
+  method           VARCHAR(32),
+  source           VARCHAR(32)  NOT NULL,
+  occurred_at_utc  TIMESTAMPTZ  NOT NULL,
+  received_at_utc  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_gate_reads_bag ON gate_reads(bag_id);
+
+-- Güvenlik personelinin inceleyeceği kayıtlar. Kapıda alarm yoktur; sonuç insan incelemesiyle verilir.
+CREATE TABLE exit_reviews (
+  review_id        UUID PRIMARY KEY,
+  gate_read_id     UUID         NOT NULL UNIQUE REFERENCES gate_reads(read_id),
+  bag_id           UUID REFERENCES bags(bag_id),
+  bag_tag          CHAR(10)     NOT NULL,
+  flight_id        VARCHAR(40),
+  gate_id          VARCHAR(32)  NOT NULL,
+  reason           VARCHAR(24)  NOT NULL,             -- PNR_MISMATCH, UNKNOWN_TAG, NOT_ON_CAROUSEL
+  occurred_at_utc  TIMESTAMPTZ  NOT NULL,
+  status           VARCHAR(12)  NOT NULL DEFAULT 'OPEN',   -- OPEN, RESOLVED
+  resolution       VARCHAR(16),                        -- CONFIRMED, FALSE_ALARM
+  resolved_by      VARCHAR(64),
+  resolved_at_utc  TIMESTAMPTZ,
+  note             VARCHAR(200)
+);
+CREATE INDEX idx_exit_reviews_open ON exit_reviews(occurred_at_utc) WHERE status = 'OPEN';
+
 -- ---------------------------------------------------------------------------
 -- Faz 4.3: uygulama rolü ve yalnızca eklemeli olay günlüğü.
 -- API bu kısıtlı rolle bağlanır. Hiçbir tabloda DELETE yetkisi yoktur; olay günlüğü ve ölü mektup tablosu
@@ -133,6 +170,8 @@ GRANT SELECT, INSERT          ON flights, passengers, ml_bag_outcomes TO aerobag
 GRANT SELECT, INSERT, UPDATE  ON bags, outbox_messages, exit_deadlines, flight_context TO aerobag_app;
 GRANT SELECT, INSERT          ON baggage_events TO aerobag_app;
 GRANT INSERT                  ON dead_letter_messages TO aerobag_app;
+GRANT SELECT, INSERT          ON gate_reads TO aerobag_app;
+GRANT SELECT, INSERT, UPDATE  ON exit_reviews TO aerobag_app;
 GRANT USAGE                   ON ALL SEQUENCES IN SCHEMA public TO aerobag_app;
 
 CREATE FUNCTION forbid_event_log_change() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -144,4 +183,8 @@ END $$;
 CREATE TRIGGER baggage_events_no_update_delete BEFORE UPDATE OR DELETE ON baggage_events
   FOR EACH ROW EXECUTE FUNCTION forbid_event_log_change();
 CREATE TRIGGER baggage_events_no_truncate BEFORE TRUNCATE ON baggage_events
+  FOR EACH STATEMENT EXECUTE FUNCTION forbid_event_log_change();
+CREATE TRIGGER gate_reads_no_update_delete BEFORE UPDATE OR DELETE ON gate_reads
+  FOR EACH ROW EXECUTE FUNCTION forbid_event_log_change();
+CREATE TRIGGER gate_reads_no_truncate BEFORE TRUNCATE ON gate_reads
   FOR EACH STATEMENT EXECUTE FUNCTION forbid_event_log_change();

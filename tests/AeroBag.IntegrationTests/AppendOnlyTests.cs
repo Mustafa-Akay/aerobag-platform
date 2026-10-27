@@ -49,7 +49,7 @@ public class AppendOnlyTests(PostgresFixture fx) : IClassFixture<PostgresFixture
     public async Task App_role_has_no_delete_anywhere_and_cannot_read_dead_letters_or_create_tables()
     {
         await using var app = NpgsqlDataSource.Create(fx.AppConnectionString);
-        foreach (var table in new[] { "flights", "passengers", "bags", "outbox_messages", "exit_deadlines", "flight_context", "ml_bag_outcomes", "dead_letter_messages" })
+        foreach (var table in new[] { "flights", "passengers", "bags", "outbox_messages", "exit_deadlines", "flight_context", "ml_bag_outcomes", "dead_letter_messages", "gate_reads", "exit_reviews" })
         {
             Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, (await FailsAsync(app, $"DELETE FROM {table}")).SqlState);
         }

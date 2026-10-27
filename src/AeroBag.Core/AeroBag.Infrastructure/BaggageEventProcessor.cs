@@ -78,11 +78,11 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
             var lookupKey = hasher.Compute(ev.Pnr, ev.Surname);
             await using (var pc = Cmd(conn, tx,
                              """
-                             INSERT INTO passengers (passenger_id, flight_id, lookup_key, cabin_class)
-                             VALUES (@id, @f, @k, @c)
+                             INSERT INTO passengers (passenger_id, flight_id, lookup_key, pnr_key, cabin_class)
+                             VALUES (@id, @f, @k, @pk, @c)
                              ON CONFLICT (flight_id, lookup_key) DO NOTHING
                              """,
-                             P("id", Guid.NewGuid()), P("f", flightId), PB("k", lookupKey), P("c", ev.CabinClass ?? "Y")))
+                             P("id", Guid.NewGuid()), P("f", flightId), PB("k", lookupKey), PB("pk", hasher.ComputePnr(ev.Pnr)), P("c", ev.CabinClass ?? "Y")))
             {
                 await pc.ExecuteNonQueryAsync(ct);
             }

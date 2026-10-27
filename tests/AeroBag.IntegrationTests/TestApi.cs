@@ -14,8 +14,12 @@ internal static class TestApi
     public const string ContextOnlyId = "aodb-only";
     public const string ContextOnlySecret = "integration-test-aodb-secret-0123456789ab";
 
-    public static WebApplicationFactory<Program> Create(PostgresFixture fx) => new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+    public static WebApplicationFactory<Program> Create(PostgresFixture fx, params (string Key, string Value)[] extra) => new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
     {
+        foreach (var (key, value) in extra)
+        {
+            b.UseSetting(key, value);
+        }
         b.UseSetting("ConnectionStrings:Default", fx.AppConnectionString);
         b.UseSetting("Ml:BaseUrl", "");
         b.UseSetting("Auth:SigningKey", "integration-test-signing-key-0123456789abcdef");

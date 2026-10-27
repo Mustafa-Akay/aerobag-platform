@@ -42,7 +42,7 @@ public sealed class AuthTests(PostgresFixture fx) : IClassFixture<PostgresFixtur
 
     private static async Task<string> PassengerTokenAsync(HttpClient client, string pnr)
     {
-        var resp = await client.GetAsync($"/v1/lookup?pnr={pnr}&surname=YILMAZ");
+        var resp = await client.PostAsJsonAsync("/v1/lookup", new { pnr, surname = "YILMAZ" });
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var json = await resp.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(json.GetProperty("expiresInSec").GetInt32() > 0);

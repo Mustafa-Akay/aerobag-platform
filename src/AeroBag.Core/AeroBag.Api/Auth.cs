@@ -172,3 +172,5 @@ public static class ClaimsPrincipalExtensions
 }
 
 public sealed record LoginRequest(string? Username, string? Password);
+
+public sealed record LookupRequest(string? Pnr, string? Surname);

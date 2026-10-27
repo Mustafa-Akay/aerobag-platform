@@ -27,6 +27,7 @@ CREATE TABLE passengers (
   flight_id     VARCHAR(40) NOT NULL REFERENCES flights(flight_id),
   lookup_key    BYTEA       NOT NULL,   -- HMAC-SHA256(gizli_anahtar, upper(pnr) || '|' || normalize(soyad))
   pnr_key       BYTEA       NOT NULL,   -- HMAC-SHA256(gizli_anahtar, 'PNR|' || upper(pnr)); çıkışta aynı PNR'daki yolcular (Faz 4)
+  anonymized_at_utc TIMESTAMPTZ,        -- saklama süresi dolunca özetler rastgele değerle değiştirilir (KVKK notu)
   display_name  VARCHAR(64),            -- demoda takma ad; gerçek kurulumda boş
   cabin_class   CHAR(1)     NOT NULL,
   UNIQUE (flight_id, lookup_key)
@@ -167,6 +168,8 @@ END $$;
 GRANT USAGE ON SCHEMA public TO aerobag_app;
 
 GRANT SELECT, INSERT          ON flights, passengers, ml_bag_outcomes TO aerobag_app;
+-- Saklama süresi işi yalnızca bu üç sütunu değiştirebilir (sütun düzeyi yetki).
+GRANT UPDATE (lookup_key, pnr_key, anonymized_at_utc) ON passengers TO aerobag_app;
 GRANT SELECT, INSERT, UPDATE  ON bags, outbox_messages, exit_deadlines, flight_context TO aerobag_app;
 GRANT SELECT, INSERT          ON baggage_events TO aerobag_app;
 GRANT INSERT                  ON dead_letter_messages TO aerobag_app;

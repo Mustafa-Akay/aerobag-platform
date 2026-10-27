@@ -11,6 +11,13 @@ using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// İstek başlangıç/bitiş kayıtları adresi sorgu parametreleriyle yazar (ör. canlı kanalın access_token'ı).
+// Bu kayıtlar kişisel veri ya da jeton taşımasın diye yalnızca uyarı düzeyinde tutulur.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.AspNetCore.Routing.EndpointMiddleware", LogLevel.Warning);
+// Her yanıt için "JSON yazıldı / durum kodu" satırları; değer içermez ama konsolu boğar.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Http.Result", LogLevel.Warning);
+
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? "Host=localhost;Port=5433;Database=aerobag;Username=aerobag_app;Password=aerobag_app_dev"; // kısıtlı uygulama rolü (db/init.sql)
 
@@ -51,6 +58,11 @@ else
 builder.Services.AddHostedService<MlOutcomeBackgroundService>();
 builder.Services.AddSingleton<ExitDeadlineService>();
 builder.Services.AddHostedService<ExitDeadlineBackgroundService>();
+
+// KVKK (Faz 4): teslimden belirli bir süre sonra yolcunun arama özetleri geri dönülmez şekilde değiştirilir.
+builder.Services.AddSingleton(new RetentionOptions(builder.Configuration.GetValue("Retention:PersonalDataDays", 30)));
+builder.Services.AddSingleton<RetentionService>();
+builder.Services.AddHostedService<RetentionBackgroundService>();
 
 // Outbox -> SignalR: veritabanına yazılan olaylar arka planda içeriksiz canlı bildirimlere çevrilir.
 builder.Services.AddSingleton<OutboxRelay>();
@@ -186,9 +198,12 @@ app.MapPost("/v1/auth/token", (LoginRequest body, TokenService tokens) =>
 }).RequireRateLimiting("login");
 
 // Yolcu sorgusu: PNR + soyad. Kayıt yok, PNR yanlış ve soyad yanlış durumları aynı yanıtı verir (bilgi sızdırmaz).
-app.MapGet("/v1/lookup", async (string? pnr, string? surname, PassengerQueries queries, TokenService tokens, CancellationToken ct) =>
+// PNR ve soyad istek gövdesindedir: adres (URL) sunucu, vekil sunucu ve tarayıcı kayıtlarına düşer, gövde düşmez.
+app.MapPost("/v1/lookup", async (LookupRequest body, PassengerQueries queries, TokenService tokens, CancellationToken ct) =>
 {
     var notFound = Results.NotFound(new { error = "Kayıt bulunamadı." });
+    var pnr = body.Pnr;
+    var surname = body.Surname;
 
     if (string.IsNullOrWhiteSpace(pnr) || string.IsNullOrWhiteSpace(surname) || pnr.Length > 8 || surname.Length > 64)
     {

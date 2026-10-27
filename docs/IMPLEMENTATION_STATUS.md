@@ -9,7 +9,7 @@ Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, �
 | 1. Çekirdek | Tamam |
 | 2. Makine öğrenmesi | Tamam (bkz. aşağıda ve `EVALUATION.md`) |
 | 3. Dayanıklılık | Ölçüt karşılandı; Kafka uyumlu broker yok (bkz. "Faz 3 durumu") |
-| 4. Güvenlik ve çıkış doğrulama | Sürüyor: kimlik doğrulama (JWT), kaynak imzası, yalnızca eklemeli günlük, ExitGuard arka ucu tamam; simülatör kapı paketleri, yanlış alarm ölçümü, arayüz, tehdit modeli ve KVKK notu kaldı |
+| 4. Güvenlik ve çıkış doğrulama | Tamam: JWT ve roller, kaynak imzası, yalnızca eklemeli günlük, ExitGuard (bayraklı), yanlış alarm ölçümü, saklama süresi; `THREAT_MODEL.md` ve `KVKK.md` |
 | 5. Opsiyonel donanım demosu | Başlanmadı |
 
 ## Çalışan parçalar
@@ -183,4 +183,12 @@ Bilinen sınırlar:
 Bilinen sınırlar:
 - Yanlış alarm ve kaçırma oranları sensör varsayımlarının sonucudur; kural doğru çalışıyor mu sorusunu yanıtlar, sahadaki oranı vermez (Faz 5'te ölçülmesi gerekir).
 - Yan koridordan okunan bavul, sahibi henüz çıkmadıysa `EXIT_REVIEW` olur; gerçek sahibi daha sonra geçtiğinde bavul zaten kapanmış sayılır. Bu bir yanlış alarmın gerçek maliyetidir ve inceleme kaydıyla personele bırakılır.
+
+## Faz 4.5: tehdit modeli, KVKK notu ve saklama süresi
+
+- **`docs/THREAT_MODEL.md`:** STRIDE tablosu; her tehdit için önlem, onu doğrulayan test ve açık kalanlar. Otomatik testi olmayan önlemler (hız sınırı, 413, canlı kanalın içeriksizliği, adres kayıtlarının kapatılması) açıkça "otomatik test yok" ya da "kod incelemesi" diye işaretlendi.
+- **`docs/KVKK.md`:** hangi verinin nereye gittiği, uygulanan ilkeler, açık kalanlar. Hukuki danışmanlık değildir.
+- **Bulunan ikinci açık:** yolcu sorgusu `GET /v1/lookup?pnr=...&surname=...` idi ve ASP.NET Core istek adresini sorgu parametreleriyle konsola yazıyordu; PNR ve soyad API kayıtlarına düşüyordu. Sorgu `POST /v1/lookup` (JSON gövde) oldu ve istek adresi kayıtları uyarı düzeyine çekildi (bu, canlı kanalın `access_token`'ını da kayıtlardan çıkarır).
+- **Saklama süresi:** `RetentionService` saatte bir, bütün bavulları teslim edilmiş ve son güncellemesinden 30 gün geçmiş yolcuların `lookup_key` ve `pnr_key` değerlerini rastgele değerle değiştirir (`Retention:PersonalDataDays`). Uygulama rolü yolcu satırında yalnızca bu sütunları güncelleyebilir (sütun düzeyi yetki). Testler: süre dolunca yolcu bulunamaz, süre dolmadan ve teslim edilmemiş bavulda dokunulmaz, ikinci çalıştırma tekrar değiştirmez, uygulama rolü başka sütunu değiştiremez.
+- Şema değişti: `docker compose down -v` gerekir.
 

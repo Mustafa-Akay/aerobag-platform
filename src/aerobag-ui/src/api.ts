@@ -82,9 +82,18 @@ async function getJson<T>(url: string, signal?: AbortSignal, token?: string): Pr
   return (await response.json()) as T;
 }
 
-export function lookup(pnr: string, surname: string, signal?: AbortSignal): Promise<LookupResult> {
-  const query = `pnr=${encodeURIComponent(pnr)}&surname=${encodeURIComponent(surname)}`;
-  return getJson<LookupResult>(`/v1/lookup?${query}`, signal);
+/** PNR ve soyad adreste değil gövdede gider; böylece sunucu ve vekil sunucu kayıtlarına düşmez. */
+export async function lookup(pnr: string, surname: string, signal?: AbortSignal): Promise<LookupResult> {
+  const response = await fetch("/v1/lookup", {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pnr, surname }),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status);
+  }
+  return (await response.json()) as LookupResult;
 }
 
 export async function login(username: string, password: string): Promise<LoginResult> {

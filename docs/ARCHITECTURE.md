@@ -565,7 +565,7 @@ Sonuçlar `docs/EVALUATION.md` dosyasında tekrarlanabilir komutlarla birlikte y
 
 ## 9. Güvenlik, gizlilik ve tehdit modeli
 
-Bu bölüm Faz 1'den itibaren tasarım kararlarına yön verir; Faz 4'te tamamlanıp `docs/THREAT_MODEL.md` olarak yayınlanır.
+Bu bölüm Faz 1'den itibaren tasarım kararlarına yön verir. Çalışan kodun güncel durumu (önlem, test, açık kalanlar) `docs/THREAT_MODEL.md` ve `docs/KVKK.md`'dedir.
 
 ### 9.1 STRIDE özeti
 

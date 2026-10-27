@@ -63,6 +63,8 @@ Simülatör (ayrı terminal). Başlangıçta örnek PNR ve soyadları yazdırır
 dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode live --speed 5
 ```
 
+Canlı modda çıkış okumaları ExitGuard kapı paketi olarak gönderilir (bavul-PNR eşleştirmesi); güvenlik rolüyle girince panoda inceleme kayıtları görünür. Kapı kuralının yanlış alarm oranını görmek için: `dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode gate-eval`.
+
 `--speed` sanal saniye / gerçek saniye oranıdır. ETA bandını görmek için düşük bir değer (1 - 5) kullanın. Tüm seçenekler için simülatörü `--help` ile çalıştırın. Veri seti üretmek için `--mode csv` kullanılır.
 
 Şema değiştiğinde veritabanı `docker compose down -v` ile sıfırlanır. Postgres hazır olmadan API'yi başlatmayın: hazır değilken gönderilen olaylar kaybolur ve sonraki olaylar "sıra dışı" görünür.

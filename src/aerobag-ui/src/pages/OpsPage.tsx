@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, getFlights, getFlightSla, type FlightSla, type FlightSummary } from "../api";
 import { clearStaff, loadStaff, type StaffSession } from "../auth";
 import { StaffLogin } from "../components/StaffLogin";
+import { SecurityPanel } from "../components/SecurityPanel";
 import { SlaPanel } from "../components/SlaPanel";
 import { clockTime, decimalMinutes } from "../format";
 import { useCoalescedTick, useLive } from "../live";
@@ -82,7 +83,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
           </button>
         </p>
       </div>
-      <p className="mt-2 text-steel">Uçuş başına bagaj sayıları, ilk bagaj süresi ve sıra dışı olaylar. "Alındı" banttan alınan tüm bagajları sayar; çıkış sütunları bunların alt kümesidir. "Çıkış okunmadı" bir sonuç değil, inceleme gerektiren durumdur.</p>
+      <p className="mt-2 text-steel">Uçuş başına bagaj sayıları, ilk bagaj süresi ve sıra dışı olaylar. "Alındı" banttan alınan tüm bagajları sayar; çıkış sütunları bunların alt kümesidir. "Çıkış okunmadı" bir sonuç değil, inceleme gerektiren durumdur. "İncelemede": çıkışta bavul ile rezervasyon eşleşmedi.</p>
 
       {error && (
         <p role="alert" className="mt-4 border-l-4 border-alert bg-tag p-3 text-sm text-alert">
@@ -106,6 +107,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Alındı</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Çıkış okundu</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Çıkış okunmadı</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">İncelemede</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Sıra dışı</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">İlk bagaj (dk)</th>
               </tr>
@@ -121,6 +123,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
                   <td className="px-3 py-2 text-right">{f.claimed}</td>
                   <td className="px-3 py-2 text-right">{f.exitRead}</td>
                   <td className={["px-3 py-2 text-right", f.exitOverdue > 0 ? "font-bold text-signal" : ""].join(" ")}>{f.exitOverdue}</td>
+                  <td className={["px-3 py-2 text-right", f.exitReview > 0 ? "font-bold text-signal" : ""].join(" ")}>{f.exitReview}</td>
                   <td className={["px-3 py-2 text-right", f.anomalies > 0 ? "font-bold text-signal" : ""].join(" ")}>{f.anomalies}</td>
                   <td className="px-3 py-2 text-right">{f.firstBagMinutes === null ? "–" : decimalMinutes(f.firstBagMinutes)}</td>
                 </tr>
@@ -129,6 +132,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
           </table>
         </div>
       )}
+      {session.role === "security" && <SecurityPanel token={session.token} onExpired={onExpired} />}
       {sla && sla.length > 0 && <SlaPanel rows={sla} />}
       {updatedAt && (
         <p className="mt-3 text-xs text-steel">

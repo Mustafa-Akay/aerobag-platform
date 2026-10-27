@@ -171,6 +171,16 @@ Bilinen sınırlar:
 Bilinen sınırlar:
 - Kuralın kendisi deterministiktir; yanlış alarm ve kaçırma oranları sensörün okuma hatalarına bağlıdır. Bunlar sonraki dilimde simülatörle ölçülecek ve yalnızca varsayılan hata oranları altında geçerli olacak.
 - PNR'ı paylaşan herkes (aynı rezervasyon) birbirinin bavulunu çıkarabilir; bu bilinçli bir kuraldır ve PNR'ı ele geçiren biri için açık bir yoldur.
-- Yolcuya bildirim ve güvenlik ekranı arayüzü henüz yok (sonraki dilim). İnceleme kayıtları canlı kanaldan bildirilmiyor, ekran yoklama ile okuyacak.
+- İnceleme kayıtları canlı kanaldan bildirilmiyor; güvenlik ekranı 5 sn'de bir yoklar.
 - Şema değişti: `docker compose down -v` gerekir.
+
+## Faz 4.4 (ikinci dilim): kapı paketleri, yanlış alarm ölçümü, güvenlik ekranı
+
+- **Simülatör:** canlı modda çıkış okumaları artık varsayılan olarak ExitGuard kapı paketidir (`--exit-mode bpm` ile eski BPM EXIT). Sensör modeli `GateModel.cs`'tedir ve bütün oranlar demo varsayımıdır: bavulların %25'i bir öncekiyle aynı rezervasyonda, grup bavulunun %30'unu gruptaki başka biri çıkarır, %0,5'ini rezervasyonla ilgisi olmayan biri çıkarır, %2'si hiç okunmaz, %3'ünde doğrulama yoktur, okumaların %15'i zayıf sinyallidir (0,20-0,75), zayıf okumaların %30'unda PNR'ın bir karakteri yanlış okunur, %1'inde yan koridordaki bir bavul da pakete karışır. Bu modda yalnızca PNR'lar ve çıkış mesajları değişir; bavul zaman çizelgesi ve CSV/ML verisi aynıdır (birim testi).
+- **Ölçüm:** `--mode gate-eval` API'siz, çok sayıda uçuşta (varsayılan 200) aynı karar kuralını (`ExitGuardRules`) çalıştırır ve farklı sinyal eşiklerinde yanlış alarm, kararsız okuma ve yakalanan uyuşmazlık sayılarını raporlar. Canlı modda simülatör, API'nin her etiket için verdiği kararı gerçek durumla birlikte sayar. Sonuçlar `EVALUATION.md`'dedir: varsayılan eşikte (0,60) yanlış alarm %1,38, kararsız okuma %13,5, başkasının yakalanması %87, başkasının sahip diye geçmesi 0. Açılan incelemelerin yalnızca yaklaşık %24'ü gerçek vaka (taban oran etkisi).
+- **Arayüz:** güvenlik rolüyle girilen panoda "Çıkış inceleme kayıtları" bölümü (gerekçe, uçuş, kapı, zaman; "Yanlış alarm" ve "Doğrulandı" düğmeleri, isteğe bağlı not). Operasyon tablosunda "İncelemede" sütunu. Yolcu sayfası `EXIT_REVIEW` durumunda ARCHITECTURE.md 6.3'teki bilgilendirme mesajını gösterir (alarm dili yok).
+
+Bilinen sınırlar:
+- Yanlış alarm ve kaçırma oranları sensör varsayımlarının sonucudur; kural doğru çalışıyor mu sorusunu yanıtlar, sahadaki oranı vermez (Faz 5'te ölçülmesi gerekir).
+- Yan koridordan okunan bavul, sahibi henüz çıkmadıysa `EXIT_REVIEW` olur; gerçek sahibi daha sonra geçtiğinde bavul zaten kapanmış sayılır. Bu bir yanlış alarmın gerçek maliyetidir ve inceleme kaydıyla personele bırakılır.
 

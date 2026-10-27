@@ -34,6 +34,7 @@ export type FlightSummary = {
   claimed: number;
   exitRead: number;
   exitOverdue: number;
+  exitReview: number;
   anomalies: number;
   firstUnloadUtc: string | null;
   firstCarouselUtc: string | null;
@@ -104,4 +105,33 @@ export function getFlights(token: string, signal?: AbortSignal): Promise<FlightS
 
 export function getFlightSla(token: string, signal?: AbortSignal): Promise<FlightSla[]> {
   return getJson<FlightSla[]>("/v1/flights/sla", signal, token);
+}
+
+export type ExitReview = {
+  id: string;
+  bagTag: string;
+  flightId: string | null;
+  gateId: string;
+  reason: "PNR_MISMATCH" | "UNKNOWN_TAG" | "NOT_ON_CAROUSEL" | string;
+  occurredAtUtc: string;
+  status: "OPEN" | "RESOLVED";
+  resolution: "CONFIRMED" | "FALSE_ALARM" | null;
+  resolvedBy: string | null;
+  resolvedAtUtc: string | null;
+  note: string | null;
+};
+
+export function getReviews(token: string, signal?: AbortSignal): Promise<ExitReview[]> {
+  return getJson<ExitReview[]>("/v1/security/reviews", signal, token);
+}
+
+export async function resolveReview(token: string, id: string, resolution: "CONFIRMED" | "FALSE_ALARM", note: string): Promise<void> {
+  const response = await fetch(`/v1/security/reviews/${encodeURIComponent(id)}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ resolution, note: note.trim() === "" ? null : note.trim() }),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status);
+  }
 }

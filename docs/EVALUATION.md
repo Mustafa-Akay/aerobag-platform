@@ -202,3 +202,43 @@ Tohum değişkenliği (5 tohum): 1.76–1.77 dk.
 
 ### Sonuç
 Simülatör, bildirilen gerçek performansla aynı büyüklük mertebesinde sonuç üretiyor (özellikle son bavul için). Parametreler bu verilerle **kalibre edilmedi** ve gerçek bir havalimanı verisiyle doğrulanmadı. ARCHITECTURE.md 8.5'teki "kalibre edilir" ifadesi buna göre düzeltildi. Gerçek veriyle kalibrasyon, bu projenin kapsamı dışında kalan bir adımdır.
+
+---
+
+## ExitGuard: çıkışta bavul-PNR eşleştirmesi (simülasyon)
+
+**Bu bölümdeki oranlar kuralın kendisini değil, varsayılan sensör hatalarına karşı davranışını gösterir.** Sensör modeli (`src/AeroBag.Core/AeroBag.Simulator/GateModel.cs`) tamamen demo varsayımıdır: %25 bavul aynı rezervasyonda, grup bavullarının %30'unu gruptaki başka biri çıkarır, %0,5'ini rezervasyonla ilgisi olmayan biri çıkarır, %2'si hiç okunmaz, %3'ünde doğrulama yoktur, okumaların %15'i zayıftır (kalite 0,20-0,75) ve zayıf okumaların %30'unda PNR'ın bir karakteri yanlış okunur, %1'inde yan koridordaki bir bavul da pakete karışır. Sahadaki oranlar Faz 5'te ölçülmeden bilinemez.
+
+Komut: `dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode gate-eval` (200 uçuş, 27.449 bavul, 26.885 kapı paketi, tohum 42). Karar, API'deki kuralın aynısıdır (`ExitGuardRules`).
+
+### Sinyal eşiğine göre sonuç
+
+| Eşik | Meşru okuma | Yanlış alarm (uyuşmazlık) | Oran | Kararsız (meşru) | Başkası | Yakalanan | Kararsız (başkası) | Yanlışlıkla geçen |
+|---|---|---|---|---|---|---|---|---|
+| 0,50 | 27.004 | 614 | %2,27 | 2.908 (%10,8) | 154 | 137 (%89) | 17 | 0 |
+| **0,60 (varsayılan)** | 27.004 | 373 | %1,38 | 3.647 (%13,5) | 154 | 134 (%87) | 20 | 0 |
+| 0,70 | 27.004 | 170 | %0,63 | 4.340 (%16,1) | 154 | 131 (%85) | 23 | 0 |
+| 0,80 | 27.004 | 50 | %0,19 | 8.696 (%32,2) | 154 | 112 (%73) | 42 | 0 |
+
+"Meşru okuma": sahip, aynı rezervasyondaki yolcu ve yan koridordan karışan bavul. "Kararsız": sinyal eşiğin altında ya da doğrulama yok; durum değişmez, bavul çıkış süresi dolunca operasyon ekranında "çıkış okunmadı" olur.
+
+### Eşik 0,60'ta ayrıntı (gerçek → karar)
+
+| Gerçek | Sahip olarak geçti | Kararsız | Uyuşmazlık incelemesi | Sıra dışı incelemesi | Zaten kapanmış |
+|---|---|---|---|---|---|
+| Sahip | 19.860 | 3.157 | 270 | 0 | 0 |
+| Aynı rezervasyon | 2.930 | 478 | 36 | 0 | 0 |
+| Yan koridordaki bavul | 2 | 12 | 67 | 51 | 141 |
+| Başkası | 0 | 20 | 134 | 0 | 0 |
+
+### Okuma
+1. **Kural hiçbir eşikte başkasını sahip diye geçirmedi.** Bu beklenen ve kısmen döngüsel bir sonuçtur: başkası farklı bir PNR sunduğu sürece eşleşme olamaz. Bavulun PNR'ını bilen biri (biniş kartını ele geçiren, aynı rezervasyondaki biri) bu kuraldan geçer; bu, kuralın tasarım sınırıdır.
+2. **Eşik bir takastır.** Eşik yükseldikçe yanlış alarm azalır (%2,27 → %0,19), ama kararsız okuma artar (%10,8 → %32,2) ve yakalama düşer (%89 → %73). 0,60 ile 0,70 arası dengeli görünüyor; 0,80'de meşru okumaların üçte biri karara bağlanamıyor.
+3. **Alarmların çoğu yanlış alarm (taban oran etkisi).** 0,60'ta uyuşmazlık ve sıra dışı incelemeleri toplam 373 + 51 = 424 meşru okumadan, 134 gerçek vakadan geliyor: açılan incelemelerin yalnızca yaklaşık **%24'ü** gerçek. Gerçek vaka nadir (%0,5) olduğu için küçük bir yanlış okuma oranı bile alarmları domine ediyor. Uçuş başına (yaklaşık 135 bavul) ortalama 2 yanlış inceleme demek. Bu yüzden tasarım kapıda alarm değil, sessiz inceleme kaydı üretir; sonuç personele bırakılır.
+4. **Yanlış alarmların iki kaynağı var:** zayıf okumada PNR'ın yanlış okunması (sahip 270 + aile 36) ve yan koridordan bavul karışması (67 uyuşmazlık + 51 sıra dışı). İlki eşikle azaltılabilir; ikincisi eşikle azalmaz, okuyucu yerleşimi ve kontrollü şerit gibi fiziksel önlemler ister (ARCHITECTURE.md 9.3).
+5. **Kararsız kalan başkası (20) sessizce geçmiş sayılmaz:** bavul `CLAIMED_FROM_BELT`'te kalır ve çıkış süresi dolunca "çıkış okunmadı" olur. Ama bu, uyuşmazlık kadar güçlü bir sinyal değildir.
+
+### Sınırlar
+- Sensör hata oranları ve gerçek vaka oranı varsayımdır; sonuçlar bu varsayımlarla birlikte okunmalıdır. Farklı varsayımlarla (örneğin daha az yan koridor karışması) tablo büyük ölçüde değişir.
+- Yan koridordan okunan bavulun durumu değerlendirmede yaklaşık olarak hesaplanır (kendi çıkışı daha önceyse kapanmış sayılır).
+- Personelin incelemede verdiği kararların doğruluğu modellenmedi.

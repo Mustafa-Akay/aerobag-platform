@@ -18,6 +18,9 @@ if (a.ContainsKey("help"))
           csv modu:  --out YOL   (varsayılan data\synthetic\bags.csv)
           live modu: --api URL   (varsayılan http://localhost:5080)
                      --exit-scans false   çıkış kapısı taramalarını kapatır (varsayılan açık)
+                     --exit-mode gate|bpm gate: ExitGuard kapı paketi (PNR'lı, varsayılan), bpm: eski BPM EXIT okuması
+          gate-eval modu: ExitGuard kuralını API'siz, çok sayıda uçuşta değerlendirir (varsayılan --flights 200)
+                     --thresholds 0.5,0.6,0.7,0.8   denenecek sinyal eşikleri
                      --speed X   sanal saniye / gerçek saniye (varsayılan 60)
                      --dup-rate P --drop-rate P --corrupt-rate P   (varsayılan 0.02, 0.01, 0.005)
                      --source-id AD          imzalı istek için kaynak adı (varsayılan simulator)
@@ -38,18 +41,30 @@ if (regime is not ('A' or 'B' or 'M'))
     return 1;
 }
 
-var exitScans = mode == "live" && !string.Equals(Get("exit-scans", "true"), "false", StringComparison.OrdinalIgnoreCase);
-var options = new SimOptions(GetInt("flights", 3), GetInt("bags", 120), GetInt("seed", 42), regime, start, exitScans);
+var exitScans = (mode == "live" && !string.Equals(Get("exit-scans", "true"), "false", StringComparison.OrdinalIgnoreCase)) || mode == "gate-eval";
+var gatePackets = mode == "gate-eval" || !string.Equals(Get("exit-mode", "gate"), "bpm", StringComparison.OrdinalIgnoreCase);
+var options = new SimOptions(GetInt("flights", mode == "gate-eval" ? 200 : 3), GetInt("bags", 120), GetInt("seed", 42), regime, start,
+    exitScans, exitScans && gatePackets);
 var flights = SimulationRunner.Run(options);
 var totalBags = flights.Sum(f => f.Bags.Count);
 Console.WriteLine($"{flights.Count} uçuş, {totalBags} bavul üretildi (tohum {options.Seed}, rejim {regime}).");
-foreach (var f in flights)
+foreach (var f in mode == "gate-eval" ? Array.Empty<FlightResult>() : flights)
 {
     var first = f.Bags.Single(b => b.IsFirst);
     var last = f.Bags.Single(b => b.IsLast);
     Console.WriteLine(
         $"  {f.Info.FlightId} rejim {f.Info.Regime} {f.Info.AircraftType} {f.Info.TotalBags} bavul bant {f.Info.Carousel}: " +
         $"ilk bavul {(first.CarouselUtc - f.Info.OnBlockUtc).TotalMinutes:F1} dk, son bavul {(last.CarouselUtc - f.Info.OnBlockUtc).TotalMinutes:F1} dk (iniş sonrası)");
+}
+
+if (mode == "gate-eval")
+{
+    var thresholds = Get("thresholds", "0.5,0.6,0.7,0.8").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(x => double.Parse(x, CultureInfo.InvariantCulture)).ToList();
+    var packets = flights.Sum(f => f.Messages.Count(m => m.Gate is not null));
+    Console.WriteLine($"{packets} kapı paketi. Sensör hata oranları demo varsayımıdır (GateModel.cs).");
+    Console.WriteLine(GateEvaluation.Report(thresholds.Select(t => GateEvaluation.Evaluate(flights, t)).ToList()));
+    return 0;
 }
 
 Console.WriteLine("Örnek yolcular (yolcu sayfasında PNR + soyad ile sorgulanır):");
@@ -88,10 +103,19 @@ if (mode == "live")
     {
         Console.WriteLine($"  {key}: {value}");
     }
+
+    var legitReads = counts.Where(kv => kv.Key.StartsWith("GATE ", StringComparison.Ordinal) && !kv.Key.StartsWith("GATE WRONG_PERSON", StringComparison.Ordinal)
+        && !kv.Key.StartsWith("GATE HTTP", StringComparison.Ordinal) && !kv.Key.EndsWith("DUPLICATE", StringComparison.Ordinal)).Sum(kv => kv.Value);
+    if (legitReads > 0)
+    {
+        var falseAlarms = counts.Where(kv => kv.Key.StartsWith("GATE ", StringComparison.Ordinal) && !kv.Key.StartsWith("GATE WRONG_PERSON", StringComparison.Ordinal)
+            && kv.Key.EndsWith("REVIEW_MISMATCH", StringComparison.Ordinal)).Sum(kv => kv.Value);
+        Console.WriteLine($"ExitGuard (bu çalıştırma): {legitReads} meşru okumada {falseAlarms} yanlış alarm. Oranlar için --mode gate-eval kullanın.");
+    }
     return counts.ContainsKey("CONNECTION_ERROR") ? 2 : 0;
 }
 
-Console.Error.WriteLine("--mode live ya da csv olmalı.");
+Console.Error.WriteLine("--mode live, csv ya da gate-eval olmalı.");
 return 1;
 
 Dictionary<string, string> ParseArgs(string[] argv)

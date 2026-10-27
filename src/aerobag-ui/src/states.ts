@@ -9,7 +9,7 @@ export const STEPS = [
   { state: "CLAIMED_FROM_BELT", short: "Alındı", message: "Bagajınız banttan alındı." },
 ] as const;
 
-/** Çıkış durumları yolcuya ayrıca gösterilmez; alındı mesajı geçerli kalır (alarm dili yok). */
+/** Çıkış durumları adım çubuğunda "Alındı" olarak görünür. EXIT_REVIEW için yolcuya ayrı bir bilgi mesajı gösterilir. */
 const AFTER_CLAIM = new Set(["EXIT_CLEARED", "EXIT_REVIEW", "EXIT_OVERDUE"]);
 
 export function stepIndex(state: string): number {
@@ -22,6 +22,10 @@ export function stepIndex(state: string): number {
 export function stateMessage(state: string): string {
   if (state === "OFFLOADED_NO_SHOW") {
     return "Bagajınız uçağa alınmadı. Havayolu ile iletişime geçin.";
+  }
+  if (state === "EXIT_REVIEW") {
+    // ARCHITECTURE.md 6.3: sahibine bilgi verilir; müdahaleye teşvik eden alarm dili kullanılmaz.
+    return "Bir bagajınızla ilgili beklenmedik bir çıkış kaydı algılandı. Lütfen bagaj hizmetleriyle iletişime geçin.";
   }
   const i = stepIndex(state);
   return i >= 0 ? STEPS[i].message : "Bagajınızın durumu güncelleniyor.";

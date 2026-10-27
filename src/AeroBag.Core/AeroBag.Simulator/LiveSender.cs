@@ -44,6 +44,14 @@ public static class LiveSender
                 }
             }
 
+            if (m.Gate is not null)
+            {
+                // Kapı paketlerine iletim gürültüsü uygulanmaz; sensör hataları GateModel'de ayrıca modellenir.
+                await PostGateAsync(http, m.Gate, m.Text, creds, Inc, ct);
+                sent++;
+                continue;
+            }
+
             if (rng.Chance(noise.Drop))
             {
                 Inc("DROPPED");
@@ -72,6 +80,33 @@ public static class LiveSender
         }
 
         return counts;
+    }
+
+    /// <summary>Kapı paketini gönderir; API'nin her etiket için verdiği kararı, simülatörün bildiği gerçekle birlikte sayar.</summary>
+    private static async Task PostGateAsync(HttpClient http, GatePacket gate, string json, SourceCredentials creds, Action<string> inc, CancellationToken ct)
+    {
+        try
+        {
+            using var request = creds.SignedPost("/v1/gate/scans", Encoding.UTF8.GetBytes(json), "application/json; charset=utf-8");
+            using var response = await http.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                inc($"GATE HTTP_{(int)response.StatusCode}");
+                return;
+            }
+
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            foreach (var r in doc.RootElement.GetProperty("results").EnumerateArray())
+            {
+                var tag = r.GetProperty("bagTag").GetString() ?? "";
+                var truth = gate.Truth.TryGetValue(tag, out var t) ? t : "?";
+                inc($"GATE {truth} -> {r.GetProperty("decision").GetString()}");
+            }
+        }
+        catch (HttpRequestException)
+        {
+            inc("CONNECTION_ERROR");
+        }
     }
 
     private static async Task PostAsync(HttpClient http, string text, SourceCredentials creds, Action<string> inc, CancellationToken ct)

@@ -7,8 +7,8 @@ services:
       POSTGRES_DB: aerobag
     ports:
       - "5433:5432"   # 5433: bilgisayarındaki olası yerel Postgres ile çakışmasın
+    # Şemayı göç aracı kurar: dotnet run --project src\AeroBag.Core\AeroBag.Migrator (db/migrations).
     volumes:
-      - ./db/init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aerobag -d aerobag"]

@@ -6,6 +6,7 @@ using AeroBag.Api;
 using AeroBag.Application.Ml;
 using AeroBag.Application.TypeB;
 using AeroBag.Infrastructure;
+using AeroBag.Infrastructure.Migrations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Npgsql;
 
@@ -19,7 +20,7 @@ builder.Logging.AddFilter("Microsoft.AspNetCore.Routing.EndpointMiddleware", Log
 builder.Logging.AddFilter("Microsoft.AspNetCore.Http.Result", LogLevel.Warning);
 
 var connectionString = builder.Configuration.GetConnectionString("Default")
-    ?? "Host=localhost;Port=5433;Database=aerobag;Username=aerobag_app;Password=aerobag_app_dev"; // kısıtlı uygulama rolü (db/init.sql)
+    ?? "Host=localhost;Port=5433;Database=aerobag;Username=aerobag_app;Password=aerobag_app_dev"; // kısıtlı uygulama rolü (db/migrations/0001_init.sql)
 
 // Yalnızca geliştirme varsayılanı; gerçek kurulumda ortam değişkeniyle (Security__LookupKeySecret) verilir.
 var lookupSecret = builder.Configuration["Security:LookupKeySecret"] ?? "dev-only-secret-change-me-0123456789";
@@ -129,6 +130,24 @@ builder.Services.AddRateLimiter(o =>
 });
 
 var app = builder.Build();
+
+// Şema sürümü: API göç yapmaz (kısıtlı rolün DDL yetkisi yok); yalnızca veritabanının kodun beklediği sürümde
+// olduğunu kontrol eder. Eski şemayla çalışmak sessiz hatalara yol açacağı için açılış durdurulur.
+// Veritabanına hiç ulaşılamıyorsa eskisi gibi uyarı verip açılır (Postgres sonradan gelebilir).
+try
+{
+    var schema = await SchemaMigrator.CurrentVersionAsync(app.Services.GetRequiredService<NpgsqlDataSource>());
+    if (schema != EmbeddedMigrations.LatestVersion)
+    {
+        throw new InvalidOperationException(
+            $"Veritabanı şeması {(schema is null ? "kurulmamış" : $"sürüm {schema}")}, kod sürüm {EmbeddedMigrations.LatestVersion} bekliyor. " +
+            "Önce göç aracını çalıştırın: dotnet run --project src\\AeroBag.Core\\AeroBag.Migrator");
+    }
+}
+catch (NpgsqlException ex) when (ex is not PostgresException)
+{
+    app.Logger.LogWarning(ex, "Açılışta veritabanına ulaşılamadı; şema sürümü kontrol edilemedi.");
+}
 if (auth.SigningKeyIsEphemeral)
 {
     app.Logger.LogWarning("Auth:SigningKey verilmedi; bu açılış için rastgele bir imza anahtarı üretildi. Yeniden başlatınca jetonlar geçersiz olur.");

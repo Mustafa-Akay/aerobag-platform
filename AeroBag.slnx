@@ -5,6 +5,7 @@
     <Project Path="src/AeroBag.Core/AeroBag.Application/AeroBag.Application.csproj" />
     <Project Path="src/AeroBag.Core/AeroBag.Domain/AeroBag.Domain.csproj" />
     <Project Path="src/AeroBag.Core/AeroBag.Infrastructure/AeroBag.Infrastructure.csproj" />
+    <Project Path="src/AeroBag.Core/AeroBag.Migrator/AeroBag.Migrator.csproj" />
     <Project Path="src/AeroBag.Core/AeroBag.Simulator/AeroBag.Simulator.csproj" />
   </Folder>
   <Folder Name="/tests/">

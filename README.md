@@ -61,6 +61,7 @@ Gereksinimler: .NET 10 SDK, Docker Desktop, Node 20+.
 
 ```powershell
 docker compose up -d --build                                          # PostgreSQL (5433) + ML servisi (127.0.0.1:8000)
+dotnet run --project src\AeroBag.Core\AeroBag.Migrator                # şemayı kurar / günceller (db/migrations)
 dotnet run --project src\AeroBag.Core\AeroBag.Api --urls http://localhost:5080
 cd src\aerobag-ui; npm install; npm run dev                           # ayrı terminal: http://localhost:5173
 dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode live --speed 5   # ayrı terminal
@@ -69,7 +70,7 @@ dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode live --speed 5
 - **Yolcu sayfası:** simülatör başlangıçta örnek PNR ve soyadları yazdırır, bunlarla yolcu sayfasında sorgu yapılır.
 - **Operasyon panosu:** giriş ister. Demo kullanıcıları yalnızca yerel demo içindir: `ops` / `ops-demo-2026` ve `security` / `security-demo-2026`. Güvenlik rolüyle girince çıkış inceleme kayıtları görünür.
 - **ExitGuard değerlendirmesi:** `dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode gate-eval` komutu kuralın sinyal eşiğine göre yanlış alarm ve yakalama oranlarını API'siz hesaplar.
-- **Şema değişince:** `docker compose down -v` ile veritabanı sıfırlanır.
+- **Şema değişince:** göç aracını yeniden çalıştırın; veri korunur. API, veritabanı kodun beklediği sürümde değilse açılmaz ve ne yapılacağını söyler.
 
 Gerçek bir kurulumda verilmesi gereken anahtarlar (`Auth__SigningKey`, `Ingest__Sources__*`, `Security__LookupKeySecret`, `ConnectionStrings__Default`) ve simülatörün bütün seçenekleri (`--help`) için [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md)'ye bakın.
 
@@ -102,7 +103,8 @@ cd ml; python -m pytest -q tests         # Python 3.12, ml/requirements.txt
 | `src/aerobag-ui` | Yolcu sayfası, operasyon panosu, güvenlik ekranı |
 | `ml` | Veri, modeller, değerlendirme ve FastAPI tahmin servisi |
 | `tests` | Birim ve entegrasyon testleri |
-| `db/init.sql` | Şema, uygulama rolü ve yetkiler |
+| `db/migrations` | Sırayla uygulanan şema göçleri (şema, uygulama rolü, yetkiler) |
+| `src/AeroBag.Core/AeroBag.Migrator` | Göç aracı (tablo sahibi hesabıyla çalışır) |
 
 ## Sınırlar
 

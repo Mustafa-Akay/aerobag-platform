@@ -135,7 +135,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 
 | Paket | Durum |
 |---|---|
-| W1 Şema göçü | Başlamadı |
+| W1 Şema göçü | Tamam, test bekliyor (branch `faz6/w1-schema-migrations`) |
 | W2 Saat soyutlaması | Başlamadı |
 | W3 Bant numarası | Başlamadı |
 | W4 Kayıp bavul tespiti | Başlamadı |

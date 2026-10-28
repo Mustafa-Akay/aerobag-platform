@@ -53,13 +53,14 @@ Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, �
 
 ```powershell
 docker compose up -d                                   # Postgres (5433)
+dotnet run --project src\AeroBag.Core\AeroBag.Migrator  # şemayı kurar / günceller
 dotnet run --project src\AeroBag.Core\AeroBag.Api --urls http://localhost:5080
 cd src\aerobag-ui; npm install; npm run dev            # http://localhost:5173
 dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode live --speed 5
 dotnet test                                            # Docker açık olmalı
 ```
 
-Şema değişince veritabanı `docker compose down -v` ile sıfırlanır. Docker açıkken ve Postgres hazırken API'yi başlatın; hazır değilken gönderilen olaylar kaybolur ve sonraki olaylar "sıra dışı" görünür.
+Şema değişince göç aracı yeniden çalıştırılır, veri korunur (Faz 6, W1). Aşağıdaki eski bölümlerdeki "`docker compose down -v` gerekir" notları W1 öncesine aittir. Docker açıkken ve Postgres hazırken API'yi başlatın; hazır değilken gönderilen olaylar kaybolur ve sonraki olaylar "sıra dışı" görünür.
 
 ## Faz 2: ML tahmini
 
@@ -192,3 +193,17 @@ Bilinen sınırlar:
 - **Saklama süresi:** `RetentionService` saatte bir, bütün bavulları teslim edilmiş ve son güncellemesinden 30 gün geçmiş yolcuların `lookup_key` ve `pnr_key` değerlerini rastgele değerle değiştirir (`Retention:PersonalDataDays`). Uygulama rolü yolcu satırında yalnızca bu sütunları güncelleyebilir (sütun düzeyi yetki). Testler: süre dolunca yolcu bulunamaz, süre dolmadan ve teslim edilmemiş bavulda dokunulmaz, ikinci çalıştırma tekrar değiştirmez, uygulama rolü başka sütunu değiştiremez.
 - Şema değişti: `docker compose down -v` gerekir.
 
+## Faz 6, W1: şema göçü
+
+- **Göç dosyaları:** `db/migrations/NNNN_ad.sql`; eski `db/init.sql` ilk göç oldu (`0001_init.sql`). Kurallar `db/migrations/README.md`'de.
+- **Göç aracı:** `AeroBag.Migrator` göçleri tablo sahibi hesabıyla uygular. Aynı anda iki aracın çalışmasını danışma kilidiyle önler. Her göçü kendi işleminde uygular, sürümü aynı işlemde kaydeder; hata olursa hiçbir şey kalmaz. `--status` yalnızca listeler.
+- **Değiştirilmezlik:** her göçün SHA-256 özeti `schema_migrations`'a yazılır. Uygulanmış bir dosya değişirse ya da veritabanı koddan yeniyse araç durur. Özet satır sonundan ve BOM'dan bağımsızdır (Windows ve Linux aynı özeti verir).
+- **Eski veritabanı:** göç kaydı olmayan ama tabloları olan bir veritabanı (`init.sql` dönemi) tanınır; araç bir kez `docker compose down -v` yapılmasını söyler. Bu son sıfırlamadır.
+- **API:** açılışta şema sürümünü okur (uygulama rolüne yalnızca `schema_migrations` üzerinde SELECT verildi). Sürüm kodunkiyle aynı değilse açılmaz ve göç aracını çalıştırmayı söyler. Veritabanına hiç ulaşılamazsa eskisi gibi uyarıyla açılır.
+- **docker-compose:** şemayı artık kurmuyor; yalnızca boş veritabanı açıyor.
+- **Testler:** göç listesi kuralları (ad biçimi, sıra, tekrar, boşluk, özet) birim testli. Gerçek PostgreSQL'de: boş veritabanına bütün göçler ve ikinci çalıştırmanın bir şey yapmaması, bekleyen göçlerin veriyi koruyarak uygulanması, değiştirilmiş göçte durma, satır sonu farkının değişiklik sayılmaması, hatalı göçün geri alınması, koddan yeni veritabanı, eski şema tespiti, uygulama rolünün sürümü okuyup DDL yapamaması. Bütün entegrasyon testlerinin fikstürü artık şemayı göç aracıyla kurar.
+
+Bilinen sınırlar:
+- Geri alma (down) göçü yok; geri dönüş yeni bir ileri göçle yapılır.
+- İşlem içinde çalışamayan komutlar (`CREATE INDEX CONCURRENTLY` gibi) bu araçla uygulanamaz.
+- Uygulama rolünün parolası ilk göçte yalnızca yerel demo için yazılıdır; gerçek kurulumda `ALTER ROLE` ile değiştirilir.

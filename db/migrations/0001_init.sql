@@ -1,4 +1,5 @@
--- AeroBag şeması (docs/ARCHITECTURE.md bölüm 7). Tüm veriler kurgusaldır.
+-- Göç 0001: AeroBag ilk şeması (docs/ARCHITECTURE.md bölüm 7). Tüm veriler kurgusaldır.
+-- Uygulanmış bir göç dosyası DEĞİŞTİRİLMEZ; değişiklik yeni bir göç dosyasıyla yapılır (bkz. db/migrations/README.md).
 
 CREATE TABLE flights (
   flight_id            VARCHAR(40) PRIMARY KEY,       -- örn. ZZ0124-20261022
@@ -159,7 +160,12 @@ CREATE INDEX idx_exit_reviews_open ON exit_reviews(occurred_at_utc) WHERE status
 -- ve kazara değişikliği önleyen bir katmandır.
 -- Parola yalnızca yerel demo içindir; gerçek kurulumda ayrı verilir.
 -- ---------------------------------------------------------------------------
-CREATE ROLE aerobag_app LOGIN PASSWORD 'aerobag_app_dev';
+-- Roller küme düzeyindedir: aynı sunucuda ikinci bir veritabanı kurulurken rol zaten olabilir.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'aerobag_app') THEN
+    CREATE ROLE aerobag_app LOGIN PASSWORD 'aerobag_app_dev';
+  END IF;
+END $$;
 
 DO $$ BEGIN
   EXECUTE format('GRANT CONNECT ON DATABASE %I TO aerobag_app', current_database());
@@ -176,6 +182,8 @@ GRANT INSERT                  ON dead_letter_messages TO aerobag_app;
 GRANT SELECT, INSERT          ON gate_reads TO aerobag_app;
 GRANT SELECT, INSERT, UPDATE  ON exit_reviews TO aerobag_app;
 GRANT USAGE                   ON ALL SEQUENCES IN SCHEMA public TO aerobag_app;
+-- API açılışta şema sürümünü okur (göç tablosunu göç aracı oluşturur).
+GRANT SELECT                  ON schema_migrations TO aerobag_app;
 
 CREATE FUNCTION forbid_event_log_change() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

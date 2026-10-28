@@ -3,6 +3,10 @@
     <PackageReference Include="Npgsql" Version="9.0.3" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Göç dosyaları derlemeye gömülür: göç aracı, API ve testler aynı listeyi kullanır. -->
+    <EmbeddedResource Include="..\..\..\db\migrations\*.sql" LogicalName="migrations.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\AeroBag.Domain\AeroBag.Domain.csproj" />
     <ProjectReference Include="..\AeroBag.Application\AeroBag.Application.csproj" />
   </ItemGroup>

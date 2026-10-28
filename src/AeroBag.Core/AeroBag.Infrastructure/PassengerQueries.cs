@@ -12,7 +12,8 @@ public sealed record EtaView(
     int P10SecondsFromNow, int P50SecondsFromNow, int P90SecondsFromNow,
     string Basis);
 
-public sealed record PassengerBagView(string BagTag, string FlightId, string State, EtaView? Eta);
+/// <param name="Carousel">Uçuşa atanan bagaj bandı (AODB bağlamı); henüz atanmadıysa null.</param>
+public sealed record PassengerBagView(string BagTag, string FlightId, string State, EtaView? Eta, string? Carousel);
 
 /// <param name="AsOfUtc">
 /// ETA'ların göreli hesaplandığı an: operasyon saati (IOperationalClock). Simülasyonda son olay zamanı, gerçek kurulumda gerçek saat.
@@ -25,7 +26,7 @@ public sealed class PassengerQueries(
 {
     private readonly IOperationalClock _now = operationalClock ?? new EventDerivedClock(db);
 
-    private record Row(string Tag, string Flight, string State, DateTimeOffset? LastEvent);
+    private record Row(string Tag, string Flight, string State, DateTimeOffset? LastEvent, string? Carousel);
 
     /// <summary>PNR ve soyada ait bavulları döndürür; kayıt yoksa ya da soyad yanlışsa aynı şekilde null.</summary>
     public async Task<LookupResult?> LookupAsync(string pnr, string surname, CancellationToken ct = default)
@@ -37,9 +38,11 @@ public sealed class PassengerQueries(
             """
             SELECT b.bag_tag_number, b.flight_id, b.current_state,
                    (SELECT max(e.occurred_at_utc) FROM baggage_events e
-                     WHERE e.bag_id = b.bag_id AND e.to_state = b.current_state AND e.outcome <> 'IGNORED_STALE')
+                     WHERE e.bag_id = b.bag_id AND e.to_state = b.current_state AND e.outcome <> 'IGNORED_STALE'),
+                   fc.carousel
             FROM passengers p
             JOIN bags b ON b.passenger_id = p.passenger_id
+            LEFT JOIN flight_context fc ON fc.flight_id = b.flight_id
             WHERE p.lookup_key = @k
             ORDER BY b.bag_tag_number
             """))
@@ -50,7 +53,8 @@ public sealed class PassengerQueries(
             {
                 rows.Add(new Row(
                     r.GetString(0).Trim(), r.GetString(1), r.GetString(2),
-                    r.IsDBNull(3) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(3)));
+                    r.IsDBNull(3) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(3),
+                    r.IsDBNull(4) ? null : r.GetString(4)));
             }
         }
 
@@ -118,7 +122,7 @@ public sealed class PassengerQueries(
 
                 window ??= EtaEstimator.Estimate(state, last, unloadToCarousel, chuteToCarousel);
             }
-            return new PassengerBagView(row.Tag, row.Flight, row.State, window is null ? null : ToView(window, asOf));
+            return new PassengerBagView(row.Tag, row.Flight, row.State, window is null ? null : ToView(window, asOf), row.Carousel);
         }).ToList();
 
         return new LookupResult(asOf, bags);

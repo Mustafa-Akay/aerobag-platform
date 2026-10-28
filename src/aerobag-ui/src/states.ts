@@ -19,7 +19,18 @@ export function stepIndex(state: string): number {
   return STEPS.findIndex((s) => s.state === state);
 }
 
-export function stateMessage(state: string): string {
+const CLAIMED_INDEX = STEPS.findIndex((s) => s.state === "CLAIMED_FROM_BELT");
+
+/** Bant numarası, bavul banttan alınana kadar gösterilir (alındıktan sonra ya da uçağa alınmadıysa anlamı yok). */
+export function showsCarousel(state: string): boolean {
+  const i = stepIndex(state);
+  return i >= 0 && i < CLAIMED_INDEX;
+}
+
+export function stateMessage(state: string, carousel: string | null = null): string {
+  if (state === "ON_CAROUSEL" && carousel) {
+    return `Bagajınız ${carousel} numaralı bantta, alabilirsiniz.`;
+  }
   if (state === "OFFLOADED_NO_SHOW") {
     return "Bagajınız uçağa alınmadı. Havayolu ile iletişime geçin.";
   }

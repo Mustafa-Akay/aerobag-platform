@@ -19,7 +19,8 @@ public sealed record FlightSummary(
     int Stalled,
     int ExitRead,
     int ExitOverdue,
-    int ExitReview);
+    int ExitReview,
+    string? Carousel);
 
 public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = null)
 {
@@ -95,7 +96,8 @@ public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = n
                    (count(*) FILTER (WHERE current_state IN ('CLAIMED_FROM_BELT','EXIT_OVERDUE','EXIT_CLEARED','EXIT_REVIEW')))::int,
                    (count(*) FILTER (WHERE current_state = 'EXIT_CLEARED'))::int,
                    (count(*) FILTER (WHERE current_state = 'EXIT_OVERDUE'))::int,
-                   (count(*) FILTER (WHERE current_state = 'EXIT_REVIEW'))::int
+                   (count(*) FILTER (WHERE current_state = 'EXIT_REVIEW'))::int,
+                   (SELECT fc.carousel FROM flight_context fc WHERE fc.flight_id = bags.flight_id)
             FROM bags
             GROUP BY flight_id
             ORDER BY flight_id
@@ -111,7 +113,8 @@ public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = n
                     : null;
                 result.Add(new FlightSummary(id, r.GetInt32(1), r.GetInt32(2), r.GetInt32(3), r.GetInt32(4), r.GetInt32(5),
                     t.Anomalies, t.FirstUnload, t.FirstCarousel, t.LastCarousel, firstBagMinutes,
-                    stalled.GetValueOrDefault(id), r.GetInt32(6), r.GetInt32(7), r.GetInt32(8)));
+                    stalled.GetValueOrDefault(id), r.GetInt32(6), r.GetInt32(7), r.GetInt32(8),
+                    r.IsDBNull(9) ? null : r.GetString(9)));
             }
         }
 

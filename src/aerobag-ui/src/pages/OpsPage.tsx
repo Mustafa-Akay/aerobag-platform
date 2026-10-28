@@ -100,6 +100,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
             <thead>
               <tr className="text-sm text-signal">
                 <th scope="col" className="px-3 py-2 font-semibold">Uçuş</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Bant</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Toplam</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Varış öncesi</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Yolda</th>
@@ -116,6 +117,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
               {flights.map((f) => (
                 <tr key={f.flightId} className="border-t border-steel">
                   <th scope="row" className="px-3 py-2 text-left font-bold">{f.flightId}</th>
+                  <td className="px-3 py-2 text-right font-bold">{f.carousel ?? "–"}</td>
                   <td className="px-3 py-2 text-right">{f.totalBags}</td>
                   <td className="px-3 py-2 text-right">{f.beforeArrival}</td>
                   <td className="px-3 py-2 text-right">{f.inbound}</td>

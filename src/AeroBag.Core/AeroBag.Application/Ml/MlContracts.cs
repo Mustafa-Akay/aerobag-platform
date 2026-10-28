@@ -3,10 +3,15 @@ using AeroBag.Application.Eta;
 
 namespace AeroBag.Application.Ml;
 
-/// <summary>Bir uçuşun ML modeline verilen, iniş öncesinde bilinen özellikleri (AODB bağlamı).</summary>
+/// <summary>Bir uçuşun iniş öncesinde bilinen AODB bağlamı: ML modelinin özellikleri ve bant ataması.</summary>
+/// <param name="Carousel">
+/// Atanan bagaj bandı (örn. "4", "B12"); ML özelliği değildir, modele gönderilmez. Null: bu mesaj bandı bildirmiyor,
+/// kayıtlı değer korunur. Bant değişirse yeni değer geçerli olur ve yolculara canlı bildirilir (Faz 6, W3).
+/// </param>
 public sealed record FlightContext(
     string FlightId, DateTimeOffset OnBlockUtc, bool Wide, bool Rain, int Bags,
-    double StandM, double ChuteM, double SpeedMps, int Arrivals30, string Handler)
+    double StandM, double ChuteM, double SpeedMps, int Arrivals30, string Handler,
+    string? Carousel = null)
 {
     /// <summary>Python servisindeki sınırlarla aynıdır. Hata varsa açıklama, yoksa null döner.</summary>
     public string? Validate()
@@ -18,6 +23,7 @@ public sealed record FlightContext(
         if (SpeedMps is <= 0 or > 3) return "speedMps 0-3 olmalı.";
         if (Arrivals30 is < 0 or > 30) return "arrivals30 0-30 olmalı.";
         if (!Regex.IsMatch(Handler ?? "", @"^HANDLER_[ABC]$")) return "handler geçersiz.";
+        if (Carousel is not null && !Regex.IsMatch(Carousel, @"^[A-Z0-9]{1,8}\z")) return "carousel 1-8 büyük harf ya da rakam olmalı.";
         return null;
     }
 }

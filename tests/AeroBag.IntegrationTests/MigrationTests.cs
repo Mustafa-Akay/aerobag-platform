@@ -44,6 +44,30 @@ public class MigrationTests(PostgresFixture fx) : IClassFixture<PostgresFixture>
     }
 
     [Fact]
+    public async Task Upgrading_from_0001_to_0002_keeps_flight_context_rows_without_a_carousel()
+    {
+        await using var db = await FreshDatabaseAsync();
+        await SchemaMigrator.ApplyAsync(db, EmbeddedMigrations.Load().Take(1).ToList());
+        await using (var ins = db.CreateCommand(
+            """
+            INSERT INTO flight_context (flight_id, on_block_utc, wide, rain, bags, stand_m, chute_m, speed_mps, arrivals_30, handler)
+            VALUES ('ZZ0001-20261022', '2026-10-22T12:00:00Z', false, false, 10, 500, 50, 0.5, 2, 'HANDLER_A')
+            """))
+        {
+            await ins.ExecuteNonQueryAsync();
+        }
+
+        var result = await SchemaMigrator.ApplyAsync(db, EmbeddedMigrations.Load());
+
+        Assert.Contains(result.Applied, m => m.Version == 2);
+        await using var sel = db.CreateCommand("SELECT bags, carousel FROM flight_context WHERE flight_id = 'ZZ0001-20261022'");
+        await using var r = await sel.ExecuteReaderAsync();
+        Assert.True(await r.ReadAsync());
+        Assert.Equal(10, r.GetInt32(0));
+        Assert.True(r.IsDBNull(1));
+    }
+
+    [Fact]
     public async Task Only_pending_migrations_are_applied_and_data_is_kept()
     {
         await using var db = await FreshDatabaseAsync();

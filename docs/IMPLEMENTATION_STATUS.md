@@ -43,7 +43,7 @@ Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, �
 1. **Kimlik doğrulama:** personel ve yolcu tarafı JWT ile (aşağıda "Faz 4.1"), mesaj kaynakları HMAC imzasıyla (aşağıda "Faz 4.2") korunuyor. Olay günlüğü veritabanı düzeyinde yalnızca eklemelidir (aşağıda "Faz 4.3").
 2. **Çıkışta yolcu eşleştirmesi yok.** Çıkış okuması ve süre dolumu çalışıyor (aşağıda "Faz 4, ilk dilim"), ama bavul ile sunulan PNR karşılaştırılmıyor; yanlış kişi kontrolü (`EXIT_REVIEW`) yok. Faz 4.
 3. **Bantta takılı bagaj tespiti yok.** "Alındı" mesajı düşerse bagaj sonsuza dek `ON_CAROUSEL` kalır; çıkış süresi bunu çözmez çünkü sayaç alınma anında başlar.
-4. **AODB bağlamı simülatörden gelir:** gövde tipi, hava, mesafeler ve yer hizmeti firması `POST /v1/flights/context` ile verilir; gerçek bir uçuş bilgi sistemi yok. Bant numarası hâlâ saklanmıyor.
+4. **AODB bağlamı simülatörden gelir:** gövde tipi, hava, mesafeler ve yer hizmeti firması ve bant numarası `POST /v1/flights/context` ile verilir; gerçek bir uçuş bilgi sistemi yok.
 5. **ML ölçümü yalnızca sentetik veride yapıldı.** Uçuş düzeyi ve bavul düzeyi (indirme→bant) sonuçları, rejim kayması ve fizik karşılaştırması `EVALUATION.md`'dedir. Bavul düzeyi modelin kazancı ortak uçuş etkisinden gelir; bavula özgü özellikler katkı sağlamadı. Fizik sonucu dairesel, canlı olarak ekranda yakalanmadı.
 6. **Doğrulama kapsamı:** sonuçlar yalnızca simülasyon verisiyle doğrulandı. Gerçek havalimanı verisi yoktur ve IATA BIX uyumluluğu iddia edilmez.
 7. **Bağımlılık uyarısı:** `SSH.NET` (Testcontainers üzerinden, yalnızca test projesinde) için NU1903 uyarısı var. Üretime girmez; Testcontainers güncellenince kalkması beklenir.
@@ -215,3 +215,13 @@ Bilinen sınırlar:
 - **Değişen yerler:** `ExitDeadlineService`, `FlightContextStore.PendingOutcomesAsync` (artık "şimdi"yi parametre alır), `OpsQueries`, `PassengerQueries`, `SlaQueries`, `MlOutcomeBackgroundService`. SQL'deki alt sorgular kalktı, saat parametre olarak verilir. Saat yoksa (henüz hiç olay yok) takılı bavul sayılmaz, çıkış süresi ve ML geri bildirimi beklemez.
 - **Kapsam dışı:** saklama süresi (KVKK) her zaman gerçek saati kullanır; olay alınma zamanları ve jeton süreleri de gerçek saattir.
 - **Testler:** kaynak kodunu tarayan bir test, "en son olay zamanı" ile şimdi hesaplayan tek dosyanın `EventDerivedClock.cs` olduğunu doğrular (W2'nin bitti ölçütü). Sabit saatle: takılı bavul eşiği, çıkış süresi, SLA'da geçen süre, ML geri bildiriminin 10 dakikalık bekleme süresi ve yolcu ETA'sının referans anı, verilen saate göre doğru sonuç verir.
+
+## Faz 6, W3: bant numarası
+
+- **Sorun:** yolcu bavulunun nerede olduğunu görüyordu ama hangi banda gideceğini görmüyordu. Simülatör bandı biliyordu, göndermiyordu; şemadaki `flights.assigned_carousel` hiç kullanılmıyordu.
+- **Veri modeli:** göç `0002_flight_carousel`: `flight_context.carousel` (1-8 büyük harf ya da rakam, veritabanında CHECK kısıtı); kullanılmayan `flights.assigned_carousel` kaldırıldı. Bandın tek kaynağı AODB bağlamıdır.
+- **Akış:** `POST /v1/flights/context` gövdesinde isteğe bağlı `carousel`. Verilmezse kayıtlı bant korunur (bandı bilmeyen bir kaynak onu silmesin diye). Bant ilk kez atanır ya da değişirse aynı işlemde `flight.context` konulu bir outbox mesajı yazılır; yayıncı operasyon panosuna `flightsChanged`, o uçuştaki her bavulun grubuna `bagChanged` gönderir. Bildirim yine içeriksizdir: istemci yeni bandı `/v1/lookup` ile çeker.
+- **API ve arayüz:** yolcu yanıtında her bavul için `carousel`; bavul kartında sarı "Bant N" etiketi (bavul banttan alınana kadar) ve bantta iken "Bagajınız N numaralı bantta". Operasyon tablosunda bant sütunu. Bant ML özelliği değildir, modele gönderilmez.
+- **Simülatör:** her uçuşun bandını bağlamla gönderir (`carousel`).
+- **Bilinen sınırlar:** simülatör bant değişikliği senaryosu üretmiyor (değişiklik testlerle doğrulanıyor). Bant, uçuş düzeyindedir; aynı uçuşun bavullarının farklı bantlara bölünmesi desteklenmiyor. BPM'deki `.Q` (hedef bant) alanı ayrıştırılıyor ama kullanılmıyor.
+- **Testler:** bant atanmadan önce yanıtta yok, atanınca var; bantta bekleyen bavulda da dönüyor; değişince yeni değer dönüyor ve uçuştaki tüm bavulları içeren tek bildirim yazılıyor; aynı bant ya da bantsız bağlam tekrar gelince bant korunuyor ve bildirim yazılmıyor; operasyon tablosunda görünüyor; uç nokta hatalı biçimi 400 ile reddediyor, veritabanı da CHECK ile; 0001'den 0002'ye yükseltmede mevcut bağlam satırları korunuyor.

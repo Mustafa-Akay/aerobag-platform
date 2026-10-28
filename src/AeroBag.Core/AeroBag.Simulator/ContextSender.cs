@@ -1,8 +1,9 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace AeroBag.Simulator;
 
-/// <summary>Gerçek kurulumda AODB'nin yaptığı işi taklit eder: uçuş bağlamını (ML özellikleri) API'ye gönderir.</summary>
+/// <summary>Gerçek kurulumda AODB'nin yaptığı işi taklit eder: uçuş bağlamını (ML özellikleri ve bant ataması) API'ye gönderir.</summary>
 public static class ContextSender
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -25,6 +26,7 @@ public static class ContextSender
                 speedMps = f.ConveyorSpeedMps,
                 arrivals30 = f.ArrivalsLast30Min,
                 handler = f.GroundHandler,
+                carousel = f.Carousel.ToString(CultureInfo.InvariantCulture),
             };
             try
             {

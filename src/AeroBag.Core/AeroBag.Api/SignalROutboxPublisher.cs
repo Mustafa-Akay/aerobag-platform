@@ -17,6 +17,18 @@ public sealed class SignalROutboxPublisher(IHubContext<LiveHub> hub) : IOutboxPu
             await hub.Clients.Group(LiveHub.BagGroup(bagTag)).SendAsync("bagChanged", new { bagTag }, ct);
         }
 
+        // Uçuş düzeyindeki değişiklik (örn. bant ataması): o uçuştaki her bavulun grubuna ayrı bildirim.
+        if (root.TryGetProperty("bagTags", out var tags) && tags.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var t in tags.EnumerateArray())
+            {
+                if (t.GetString() is { } each)
+                {
+                    await hub.Clients.Group(LiveHub.BagGroup(each)).SendAsync("bagChanged", new { bagTag = each }, ct);
+                }
+            }
+        }
+
         if (root.TryGetProperty("flightId", out var flight) && flight.GetString() is { } flightId)
         {
             await hub.Clients.Group(LiveHub.OpsGroup).SendAsync("flightsChanged", new { flightId }, ct);

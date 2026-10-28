@@ -1,4 +1,6 @@
+using AeroBag.Application.Time;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace AeroBag.Infrastructure;
 
@@ -19,13 +21,15 @@ public sealed record FlightSummary(
     int ExitOverdue,
     int ExitReview);
 
-public sealed class OpsQueries(NpgsqlDataSource db)
+public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = null)
 {
+    private readonly IOperationalClock _now = clock ?? new EventDerivedClock(db);
+
     /// <summary>
     /// Bant ağzına gelmiş bir bagaj bu süreden uzun süredir alınmadıysa "takılı" sayılır.
     /// Simülatörde alınma gecikmesi ortalama ~140 sn olduğundan 20 dk eşiği sahte alarm üretmez.
     /// Takılı sayısı türetilmiş bir değerdir: bagajın durumu değiştirilmez.
-    /// "Şimdi", BSM olmayan olayların en son zamanıdır (simülasyonda sanal saat, gerçekte gerçek saat olmalı).
+    /// "Şimdi" operasyon saatinden gelir (IOperationalClock); saat yoksa (henüz olay yok) takılı bavul sayılmaz.
     /// </summary>
     public const int StalledCarouselMinutes = 20;
 
@@ -53,26 +57,30 @@ public sealed class OpsQueries(NpgsqlDataSource db)
         }
 
         var stalled = new Dictionary<string, int>();
-        await using (var cmd = db.CreateCommand(
-            """
-            SELECT b.flight_id, count(*)::int
-            FROM bags b
-            JOIN LATERAL (
-                SELECT max(e.occurred_at_utc) AS t
-                FROM baggage_events e
-                WHERE e.bag_id = b.bag_id AND e.to_state = 'ON_CAROUSEL' AND e.outcome <> 'IGNORED_STALE'
-            ) c ON TRUE
-            WHERE b.current_state = 'ON_CAROUSEL'
-              AND c.t < (SELECT max(occurred_at_utc) FROM baggage_events WHERE message_type <> 'BSM')
-                        - make_interval(mins => @mins)
-            GROUP BY b.flight_id
-            """))
+        var now = await _now.NowAsync(ct);
+        if (now is not null)
         {
-            cmd.Parameters.AddWithValue("mins", StalledCarouselMinutes);
-            await using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
+            await using (var cmd = db.CreateCommand(
+                """
+                SELECT b.flight_id, count(*)::int
+                FROM bags b
+                JOIN LATERAL (
+                    SELECT max(e.occurred_at_utc) AS t
+                    FROM baggage_events e
+                    WHERE e.bag_id = b.bag_id AND e.to_state = 'ON_CAROUSEL' AND e.outcome <> 'IGNORED_STALE'
+                ) c ON TRUE
+                WHERE b.current_state = 'ON_CAROUSEL'
+                  AND c.t < @now - make_interval(mins => @mins)
+                GROUP BY b.flight_id
+                """))
             {
-                stalled[r.GetString(0)] = r.GetInt32(1);
+                cmd.Parameters.AddWithValue("mins", StalledCarouselMinutes);
+                cmd.Parameters.Add(new NpgsqlParameter("now", NpgsqlDbType.TimestampTz) { Value = now.Value.UtcDateTime });
+                await using var r = await cmd.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct))
+                {
+                    stalled[r.GetString(0)] = r.GetInt32(1);
+                }
             }
         }
 

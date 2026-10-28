@@ -110,7 +110,7 @@ public class ExitDeadlineTests(PostgresFixture fx) : IClassFixture<PostgresFixtu
     public async Task Virtual_clock_is_the_latest_non_bsm_event_time()
     {
         var tag = await ClaimedBagAsync("140000");
-        var now = await Service().VirtualNowAsync();
+        var now = await new EventDerivedClock(fx.Db).NowAsync();
         Assert.NotNull(now);
         Assert.True(now >= At("140000"));
     }

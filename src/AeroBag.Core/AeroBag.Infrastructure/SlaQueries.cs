@@ -1,12 +1,13 @@
 using AeroBag.Application.Ml;
 using AeroBag.Application.Sla;
+using AeroBag.Application.Time;
 using Npgsql;
 
 namespace AeroBag.Infrastructure;
 
 /// <summary>
 /// Uçuş başına bant teslim SLA'sı (ARCHITECTURE.md 6.2). Hedefler flights tablosundaki DEMO varsayımlarıdır.
-/// Süreler on-block'tan ölçülür. "Şimdi" sanal saattir (BSM olmayan olayların en son zamanı).
+/// Süreler on-block'tan ölçülür. "Şimdi" operasyon saatinden gelir (IOperationalClock: gerçek ya da simülasyon saati).
 /// Gerçekleşen ilk bavul ilk banta geliş olayıdır; son bavul ise yalnızca uçuştaki tüm bavullar banta
 /// (ya da sonrasına) geçtiyse gerçekleşmiş sayılır. Ondan önce son bavul için model tahmini kullanılır.
 /// ML servisi kapalıysa tahmin yoktur: gerçekleşen ya da süresi dolmuş durumlar yine raporlanır, gerisi UNKNOWN olur.
@@ -20,8 +21,10 @@ public sealed record FlightSla(
     SlaLeg FirstBag,
     SlaLeg LastBag);
 
-public sealed class SlaQueries(NpgsqlDataSource db, IMlPredictor ml)
+public sealed class SlaQueries(NpgsqlDataSource db, IMlPredictor ml, IOperationalClock? clock = null)
 {
+    private readonly IOperationalClock _now = clock ?? new EventDerivedClock(db);
+
     public const string Assumption = "DEMO_ASSUMPTION";
 
     private sealed record Row(string FlightId, int FirstTarget, int LastTarget, int Total, int NotArrived,
@@ -29,15 +32,7 @@ public sealed class SlaQueries(NpgsqlDataSource db, IMlPredictor ml)
 
     public async Task<IReadOnlyList<FlightSla>> GetAsync(CancellationToken ct = default)
     {
-        DateTimeOffset? now = null;
-        await using (var cmd = db.CreateCommand("SELECT max(occurred_at_utc) FROM baggage_events WHERE message_type <> 'BSM'"))
-        {
-            await using var nr = await cmd.ExecuteReaderAsync(ct);
-            if (await nr.ReadAsync(ct) && !nr.IsDBNull(0))
-            {
-                now = nr.GetFieldValue<DateTimeOffset>(0);
-            }
-        }
+        var now = await _now.NowAsync(ct);
 
         var rows = new List<Row>();
         await using (var cmd = db.CreateCommand(

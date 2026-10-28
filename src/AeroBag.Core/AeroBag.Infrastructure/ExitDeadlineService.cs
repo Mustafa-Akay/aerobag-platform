@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AeroBag.Application.Time;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -9,22 +10,14 @@ namespace AeroBag.Infrastructure;
 /// Bu bir sonuç değil, inceleme gerektiren durumdur: etiket sorunu, salonda unutulma ya da okuma kaçırması olabilir.
 /// Yolcuya bildirim gitmez. Süre dolduktan sonra çıkış okunursa bavul EXIT_CLEARED olur (EXIT_OVERDUE son durum değildir).
 /// </summary>
-public sealed class ExitDeadlineService(NpgsqlDataSource db, TimeProvider clock)
+/// <remarks>"Şimdi" operasyon saatinden gelir (<see cref="IOperationalClock"/>); verilmezse simülasyon saati kullanılır.</remarks>
+public sealed class ExitDeadlineService(NpgsqlDataSource db, TimeProvider clock, IOperationalClock? operationalClock = null)
 {
-    /// <summary>
-    /// "Şimdi": BSM olmayan olayların en son zamanı (simülasyonda sanal saat; yolcu ETA'sı ve takılı bavul sayacıyla aynı kabul).
-    /// Gerçek kurulumda gerçek saat kullanılmalıdır. Olay akışı durursa bu saat de durur; süre dolumları o zamana kadar işlenmez.
-    /// </summary>
-    public async Task<DateTimeOffset?> VirtualNowAsync(CancellationToken ct = default)
-    {
-        await using var cmd = db.CreateCommand("SELECT max(occurred_at_utc) FROM baggage_events WHERE message_type <> 'BSM'");
-        var v = await cmd.ExecuteScalarAsync(ct);
-        return v is DateTime dt ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)) : null;
-    }
+    private readonly IOperationalClock _now = operationalClock ?? new EventDerivedClock(db);
 
     public async Task<int> ProcessDueAsync(int batchSize = 100, CancellationToken ct = default)
     {
-        var now = await VirtualNowAsync(ct);
+        var now = await _now.NowAsync(ct);
         return now is null ? 0 : await ProcessDueAsync(now.Value, batchSize, ct);
     }
 

@@ -46,10 +46,10 @@ public sealed class FlightContextStore(NpgsqlDataSource db)
 
     /// <summary>
     /// Bitmiş sayılan uçuşlar: bavulların en az %90'ı banda gelmiş ve en son banda geliş olayından sonra
-    /// (sanal saatte) en az 10 dakika geçmiş. İlk/son bavul, veritabanında görülen bavullardan hesaplanır;
+    /// (<paramref name="now"/>, operasyon saati) en az 10 dakika geçmiş. İlk/son bavul, veritabanında görülen bavullardan hesaplanır;
     /// kayıp mesajlar yüzünden son bavul bir miktar erken görünebilir.
     /// </summary>
-    public async Task<List<PendingOutcome>> PendingOutcomesAsync(CancellationToken ct = default)
+    public async Task<List<PendingOutcome>> PendingOutcomesAsync(DateTimeOffset now, CancellationToken ct = default)
     {
         await using var cmd = db.CreateCommand(
             """
@@ -64,8 +64,9 @@ public sealed class FlightContextStore(NpgsqlDataSource db)
             WHERE NOT c.outcome_reported
             GROUP BY c.flight_id, c.on_block_utc, c.wide, c.rain, c.bags, c.stand_m, c.chute_m, c.speed_mps, c.arrivals_30, c.handler
             HAVING count(*) >= c.bags * 0.9
-               AND (SELECT max(occurred_at_utc) FROM baggage_events WHERE message_type <> 'BSM') >= max(x.t) + interval '10 minutes'
+               AND @now >= max(x.t) + interval '10 minutes'
             """);
+        cmd.Parameters.Add(new NpgsqlParameter("now", NpgsqlDbType.TimestampTz) { Value = now.UtcDateTime });
         var list = new List<PendingOutcome>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))

@@ -55,6 +55,28 @@ public class MlEtaWindowTests
         Assert.NotNull(Ctx(id, bags, handler).Validate());
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("4")]
+    [InlineData("07")]
+    [InlineData("B12")]
+    [InlineData("12345678")]
+    public void Carousel_is_optional_and_accepts_short_uppercase_codes(string? carousel)
+    {
+        Assert.Null((Ctx() with { Carousel = carousel }).Validate());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("b12")]
+    [InlineData("BANT 4")]
+    [InlineData("123456789")]
+    [InlineData("4\n")]
+    public void Malformed_carousel_is_rejected(string carousel)
+    {
+        Assert.NotNull((Ctx() with { Carousel = carousel }).Validate());
+    }
+
     [Fact]
     public void Bag_window_counts_from_the_unload_event_and_stays_ordered()
     {

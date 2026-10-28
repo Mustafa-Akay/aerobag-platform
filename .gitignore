@@ -2,6 +2,7 @@ bin/
 obj/
 node_modules/
 dist/
+*.tsbuildinfo
 .vs/
 *.user
 data/synthetic/*.csv

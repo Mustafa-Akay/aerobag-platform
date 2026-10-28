@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AeroBag.Application.Ml;
 using Npgsql;
 using NpgsqlTypes;
@@ -8,19 +9,70 @@ public sealed record PendingOutcome(FlightContext Context, double FirstMin, doub
 
 public sealed class FlightContextStore(NpgsqlDataSource db)
 {
-    public async Task UpsertAsync(FlightContext c, CancellationToken ct = default)
+    /// <summary>
+    /// Bağlamı yazar. Bant numarası verilmemişse (null) kayıtlı bant korunur. Bant ilk kez atanır ya da değişirse
+    /// aynı işlemde bir outbox mesajı yazılır: operasyon panosu ve o uçuştaki bavulların yolcuları canlı bildirim alır.
+    /// </summary>
+    /// <returns>Bant numarası bu çağrıyla atandıysa ya da değiştiyse true.</returns>
+    public async Task<bool> UpsertAsync(FlightContext c, CancellationToken ct = default)
     {
-        await using var cmd = db.CreateCommand(
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+
+        string? previous = null;
+        await using (var sel = new NpgsqlCommand("SELECT carousel FROM flight_context WHERE flight_id = @id FOR UPDATE", conn, tx))
+        {
+            sel.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Varchar) { Value = c.FlightId });
+            if (await sel.ExecuteScalarAsync(ct) is string s)
+            {
+                previous = s;
+            }
+        }
+
+        await using (var cmd = new NpgsqlCommand(
             """
-            INSERT INTO flight_context (flight_id, on_block_utc, wide, rain, bags, stand_m, chute_m, speed_mps, arrivals_30, handler)
-            VALUES (@id, @ob, @w, @r, @b, @sm, @cm, @sp, @a, @h)
+            INSERT INTO flight_context (flight_id, on_block_utc, wide, rain, bags, stand_m, chute_m, speed_mps, arrivals_30, handler, carousel)
+            VALUES (@id, @ob, @w, @r, @b, @sm, @cm, @sp, @a, @h, @car)
             ON CONFLICT (flight_id) DO UPDATE SET
               on_block_utc = EXCLUDED.on_block_utc, wide = EXCLUDED.wide, rain = EXCLUDED.rain, bags = EXCLUDED.bags,
               stand_m = EXCLUDED.stand_m, chute_m = EXCLUDED.chute_m, speed_mps = EXCLUDED.speed_mps,
-              arrivals_30 = EXCLUDED.arrivals_30, handler = EXCLUDED.handler
-            """);
-        AddCommon(cmd, c);
-        await cmd.ExecuteNonQueryAsync(ct);
+              arrivals_30 = EXCLUDED.arrivals_30, handler = EXCLUDED.handler,
+              carousel = COALESCE(EXCLUDED.carousel, flight_context.carousel)
+            """, conn, tx))
+        {
+            AddCommon(cmd, c);
+            cmd.Parameters.Add(new NpgsqlParameter("car", NpgsqlDbType.Varchar) { Value = (object?)c.Carousel ?? DBNull.Value });
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        var changed = c.Carousel is not null && c.Carousel != previous;
+        if (changed)
+        {
+            var tags = new List<string>();
+            await using (var bags = new NpgsqlCommand("SELECT bag_tag_number FROM bags WHERE flight_id = @id ORDER BY bag_tag_number", conn, tx))
+            {
+                bags.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Varchar) { Value = c.FlightId });
+                await using var r = await bags.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct))
+                {
+                    tags.Add(r.GetString(0).Trim());
+                }
+            }
+
+            // Bildirim içeriksizdir (bkz. LiveHub): istemci yeni bandı mevcut uçlardan yeniden çeker.
+            await using var ob = new NpgsqlCommand(
+                "INSERT INTO outbox_messages (id, topic, partition_key, payload) VALUES (@oid, 'flight.context', @id, @pl)", conn, tx);
+            ob.Parameters.Add(new NpgsqlParameter("oid", NpgsqlDbType.Uuid) { Value = Guid.NewGuid() });
+            ob.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Varchar) { Value = c.FlightId });
+            ob.Parameters.Add(new NpgsqlParameter("pl", NpgsqlDbType.Jsonb)
+            {
+                Value = JsonSerializer.Serialize(new { flightId = c.FlightId, carousel = c.Carousel, previousCarousel = previous, bagTags = tags }),
+            });
+            await ob.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+        return changed;
     }
 
     public async Task<Dictionary<string, FlightContext>> GetAsync(IReadOnlyCollection<string> flightIds, CancellationToken ct = default)
@@ -30,7 +82,7 @@ public sealed class FlightContextStore(NpgsqlDataSource db)
 
         await using var cmd = db.CreateCommand(
             """
-            SELECT flight_id, on_block_utc, wide, rain, bags, stand_m, chute_m, speed_mps, arrivals_30, handler
+            SELECT flight_id, on_block_utc, wide, rain, bags, stand_m, chute_m, speed_mps, arrivals_30, handler, carousel
             FROM flight_context WHERE flight_id = ANY(@ids)
             """);
         cmd.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Varchar) { Value = flightIds.ToArray() });
@@ -38,7 +90,8 @@ public sealed class FlightContextStore(NpgsqlDataSource db)
         while (await r.ReadAsync(ct))
         {
             var c = new FlightContext(r.GetString(0), r.GetFieldValue<DateTimeOffset>(1), r.GetBoolean(2), r.GetBoolean(3),
-                r.GetInt32(4), r.GetDouble(5), r.GetDouble(6), r.GetDouble(7), r.GetInt32(8), r.GetString(9));
+                r.GetInt32(4), r.GetDouble(5), r.GetDouble(6), r.GetDouble(7), r.GetInt32(8), r.GetString(9),
+                r.IsDBNull(10) ? null : r.GetString(10));
             result[c.FlightId] = c;
         }
         return result;

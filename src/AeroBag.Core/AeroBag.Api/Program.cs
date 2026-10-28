@@ -273,7 +273,8 @@ app.MapGet("/v1/flights", async (OpsQueries ops, CancellationToken ct) => Result
 app.MapGet("/v1/flights/sla", async (SlaQueries sla, CancellationToken ct) => Results.Ok(await sla.GetAsync(ct)))
     .RequireAuthorization(Roles.StaffPolicy);
 
-// AODB uçuş bağlamı beslemesi (ML tahmini için). Yalnızca 'context' kapsamlı, imzalı kaynaklar.
+// AODB uçuş bağlamı beslemesi (ML tahmini ve bant ataması). Yalnızca 'context' kapsamlı, imzalı kaynaklar.
+// Bant değişirse FlightContextStore aynı işlemde canlı bildirim yazar (W3).
 app.MapPost("/v1/flights/context", async (FlightContext body, FlightContextStore store, CancellationToken ct) =>
 {
     var error = body.Validate();

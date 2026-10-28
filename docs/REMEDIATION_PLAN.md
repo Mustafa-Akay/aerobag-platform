@@ -80,6 +80,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 - **Bitti ölçütü:** yüklenmeyen bavulun yolcusu, uçak inmeden önce uyarı görür. Varışta bulunmayan bavulun yolcusu bant boşalmadan uyarı görür.
 - **Testler:** kural birim testleri (sınır süreler, sonradan bulunan bavul), işçi entegrasyon testleri, yolcu yanıtı, simülatör senaryoları.
 - **Kapsam dışı (belgelenir):** WorldTracer ya da kayıp bavul raporu (PIR) entegrasyonu, kurye ve teslimat süreci.
+- **W3 canlı denemesinden not (28 Ekim):** ZZ0102'de bavullar on-block'tan 30 dakikadan uzun süre sonra hâlâ uçaktaydı. Uçuş düzeyi ML penceresi geçtiği için kasıtlı olarak gizlendi ve yolcu hiçbir tahmin görmedi. Bu "beklenenden geç" durumu da yolcuya söylenmeli (ör. "Bavullar beklenenden geç indiriliyor"), operasyon panosunda gecikme olarak görünmeli. Kayıp bavul uyarısına giden ilk aşama budur.
 
 #### W5. Okuma kapsamı profilleri (B2)
 - **Simülatör:** üç profil.
@@ -99,6 +100,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 #### W6. ML sözleşme testi (B6)
 - **Mimari:** `contracts/ml/` altında örnek istek ve yanıt JSON'ları. Python testi, servisin gerçek yanıtının bu örneklerle aynı alanları ve tipleri taşıdığını doğrular. .NET testi, `MlHttpPredictor`'ı sahte bir HTTP işleyiciyle aynı dosyalardan besler (bugün bu sınıfın hiç testi yok).
 - **Bitti ölçütü:** Python'da bir alan adı değişirse iki taraftan biri kırmızıya döner.
+- **Görünürlük (W3 canlı denemesinden, 28 Ekim):** ML servisi `200` dönerken yolcu sorgusu indirme aşamasında `HISTORY`'ye düştü. En olası neden 2 sn zaman aşımı ve ardından 15 sn bekleme, ama `MlHttpPredictor` hataları hiçbir yere yazmadığı için doğrulanamadı. Hatalar ve bekleme başlangıcı uyarı olarak loglanır (servis adresi ve süre ile, kişisel veri olmadan); operasyon panosunda "ML erişilemedi" sayacı ve son hata zamanı gösterilir; zaman aşımı yapılandırılabilir olur.
 
 #### W7. Yük testi (B7)
 - **Mimari:** simülatöre `--mode load`: imzalı mesajları eşzamanlı gönderir; saniyedeki mesaj sayısı, p50/p95/p99 gecikme ve hata oranı raporlanır.
@@ -136,8 +138,8 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | Paket | Durum |
 |---|---|
 | W1 Şema göçü | Tamam (PR birleştirildi) |
-| W2 Saat soyutlaması | Tamam, test bekliyor (branch `faz6/w2-operational-clock`) |
-| W3 Bant numarası | Başlamadı |
+| W2 Saat soyutlaması | Tamam (PR birleştirildi) |
+| W3 Bant numarası | Tamam, test bekliyor (branch `faz6/w3-carousel`) |
 | W4 Kayıp bavul tespiti | Başlamadı |
 | W5 Okuma kapsamı profilleri | Başlamadı |
 | W6 ML sözleşme testi | Başlamadı |

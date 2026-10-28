@@ -13,6 +13,8 @@ export type PassengerBag = {
   flightId: string;
   state: string;
   eta: EtaView | null;
+  /** Uçuşa atanan bagaj bandı; henüz atanmadıysa null. */
+  carousel: string | null;
 };
 
 export type LookupResult = {
@@ -40,6 +42,7 @@ export type FlightSummary = {
   firstCarouselUtc: string | null;
   lastCarouselUtc: string | null;
   firstBagMinutes: number | null;
+  carousel: string | null;
 };
 
 export type SlaStatus = "MET" | "BREACHED" | "ON_TRACK" | "AT_RISK" | "LIKELY_BREACH" | "UNKNOWN";

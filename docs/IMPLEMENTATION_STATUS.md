@@ -207,3 +207,11 @@ Bilinen sınırlar:
 - Geri alma (down) göçü yok; geri dönüş yeni bir ileri göçle yapılır.
 - İşlem içinde çalışamayan komutlar (`CREATE INDEX CONCURRENTLY` gibi) bu araçla uygulanamaz.
 - Uygulama rolünün parolası ilk göçte yalnızca yerel demo için yazılıdır; gerçek kurulumda `ALTER ROLE` ile değiştirilir.
+
+## Faz 6, W2: operasyon saati
+
+- **Sorun:** "şimdi" beş ayrı yerde (çıkış süresi işi, ML geri bildirimi, takılı bavul sayacı, yolcu ETA'sı, SLA) SQL içinde "en son olay zamanı" olarak hesaplanıyordu. Gerçek bir kurulumda bu yanlış sonuç verirdi, olay akışı durunca da saat dururdu.
+- **Çözüm:** `IOperationalClock` (Application). İki uygulama: `SystemOperationalClock` (gerçek saat) ve `EventDerivedClock` (en son BSM olmayan olay zamanı, simülasyon). Seçim `Clock:Mode` ile: `event` (varsayılan, demo simülasyonla çalıştığı için) ya da `real`. Geçersiz değerde API açılmaz; `event` modunda açılışta uyarı yazılır.
+- **Değişen yerler:** `ExitDeadlineService`, `FlightContextStore.PendingOutcomesAsync` (artık "şimdi"yi parametre alır), `OpsQueries`, `PassengerQueries`, `SlaQueries`, `MlOutcomeBackgroundService`. SQL'deki alt sorgular kalktı, saat parametre olarak verilir. Saat yoksa (henüz hiç olay yok) takılı bavul sayılmaz, çıkış süresi ve ML geri bildirimi beklemez.
+- **Kapsam dışı:** saklama süresi (KVKK) her zaman gerçek saati kullanır; olay alınma zamanları ve jeton süreleri de gerçek saattir.
+- **Testler:** kaynak kodunu tarayan bir test, "en son olay zamanı" ile şimdi hesaplayan tek dosyanın `EventDerivedClock.cs` olduğunu doğrular (W2'nin bitti ölçütü). Sabit saatle: takılı bavul eşiği, çıkış süresi, SLA'da geçen süre, ML geri bildiriminin 10 dakikalık bekleme süresi ve yolcu ETA'sının referans anı, verilen saate göre doğru sonuç verir.

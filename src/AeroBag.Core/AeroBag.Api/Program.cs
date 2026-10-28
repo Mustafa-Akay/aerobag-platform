@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using AeroBag.Api;
 using AeroBag.Application.Ml;
+using AeroBag.Application.Time;
 using AeroBag.Application.TypeB;
 using AeroBag.Infrastructure;
 using AeroBag.Infrastructure.Migrations;
@@ -27,6 +28,17 @@ var lookupSecret = builder.Configuration["Security:LookupKeySecret"] ?? "dev-onl
 
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
+
+// Operasyon saati (Faz 6, W2): çıkış süresi, ETA, SLA, takılı bavul ve ML geri bildirimi bu saate göre çalışır.
+// "event": en son olay zamanı (simülasyon, varsayılan); "real": gerçek saat (gerçek kurulum).
+var clockMode = builder.Configuration["Clock:Mode"] ?? ClockModes.Event;
+if (clockMode is not (ClockModes.Event or ClockModes.Real))
+{
+    throw new InvalidOperationException($"Clock:Mode '{clockMode}' geçersiz; '{ClockModes.Event}' ya da '{ClockModes.Real}' olmalı.");
+}
+builder.Services.AddSingleton<IOperationalClock>(sp => clockMode == ClockModes.Real
+    ? new SystemOperationalClock(sp.GetRequiredService<TimeProvider>())
+    : new EventDerivedClock(sp.GetRequiredService<NpgsqlDataSource>()));
 builder.Services.AddSingleton(new LookupKeyHasher(Encoding.UTF8.GetBytes(lookupSecret)));
 builder.Services.AddSingleton<BaggageEventProcessor>();
 builder.Services.AddSingleton<BagQueries>();
@@ -144,6 +156,15 @@ try
             "Önce göç aracını çalıştırın: dotnet run --project src\\AeroBag.Core\\AeroBag.Migrator");
     }
 }
+catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.InvalidPassword or PostgresErrorCodes.InvalidAuthorizationSpecification
+                                       or PostgresErrorCodes.InvalidCatalogName)
+{
+    // PostgreSQL "hesap yok" ile "parola yanlış"ı aynı hatayla bildirir. En olası neden: veritabanı sıfırlandı ve göç aracı
+    // henüz çalıştırılmadı (uygulama rolünü ilk göç oluşturur).
+    throw new InvalidOperationException(
+        $"Veritabanına uygulama hesabıyla girilemedi ({ex.SqlState}: {ex.MessageText}). Uygulama rolü (aerobag_app) yok ya da parolası " +
+        "bağlantı dizesiyle uyuşmuyor. Veritabanı yeni kurulduysa önce göç aracını çalıştırın: dotnet run --project src\\AeroBag.Core\\AeroBag.Migrator", ex);
+}
 catch (NpgsqlException ex) when (ex is not PostgresException)
 {
     app.Logger.LogWarning(ex, "Açılışta veritabanına ulaşılamadı; şema sürümü kontrol edilemedi.");
@@ -157,6 +178,10 @@ if (auth.UsingDemoUsers)
     app.Logger.LogWarning("Auth:Users verilmedi; demo kullanıcıları (ops, security) etkin. Yalnızca yerel demo içindir.");
 }
 
+if (clockMode == ClockModes.Event)
+{
+    app.Logger.LogWarning("Clock:Mode=event: operasyon saati en son olay zamanıdır (simülasyon). Gerçek kurulumda Clock__Mode=real verin.");
+}
 if (ingest.UsingDemoSource)
 {
     app.Logger.LogWarning("Ingest:Sources verilmedi; demo kaynağı (simulator) etkin. Yalnızca yerel demo içindir.");

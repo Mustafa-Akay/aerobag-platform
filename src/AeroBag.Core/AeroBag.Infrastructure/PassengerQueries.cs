@@ -1,5 +1,6 @@
 using AeroBag.Application.Eta;
 using AeroBag.Application.Ml;
+using AeroBag.Application.Time;
 using AeroBag.Domain;
 using Npgsql;
 using NpgsqlTypes;
@@ -14,14 +15,16 @@ public sealed record EtaView(
 public sealed record PassengerBagView(string BagTag, string FlightId, string State, EtaView? Eta);
 
 /// <param name="AsOfUtc">
-/// ETA'ların göreli hesaplandığı an. Simülasyonda "şimdi", son olay zamanıdır (sanal saat); gerçek kurulumda gerçek saat olur.
+/// ETA'ların göreli hesaplandığı an: operasyon saati (IOperationalClock). Simülasyonda son olay zamanı, gerçek kurulumda gerçek saat.
 /// </param>
 public sealed record LookupResult(DateTimeOffset AsOfUtc, IReadOnlyList<PassengerBagView> Bags);
 
 public sealed class PassengerQueries(
     NpgsqlDataSource db, LookupKeyHasher hasher, EtaStatistics stats, TimeProvider clock,
-    IMlPredictor? ml = null, FlightContextStore? contexts = null)
+    IMlPredictor? ml = null, FlightContextStore? contexts = null, IOperationalClock? operationalClock = null)
 {
+    private readonly IOperationalClock _now = operationalClock ?? new EventDerivedClock(db);
+
     private record Row(string Tag, string Flight, string State, DateTimeOffset? LastEvent);
 
     /// <summary>PNR ve soyada ait bavulları döndürür; kayıt yoksa ya da soyad yanlışsa aynı şekilde null.</summary>
@@ -56,7 +59,8 @@ public sealed class PassengerQueries(
             return null;
         }
 
-        var asOf = await MaxEventTimeAsync(ct) ?? clock.GetUtcNow();
+        // Operasyon saati yoksa (henüz hiç olay yok) gerçek saate düşülür; o durumda gösterilecek bir ETA da yoktur.
+        var asOf = await _now.NowAsync(ct) ?? clock.GetUtcNow();
         var unloadToCarousel = await stats.UnloadToCarouselAsync(ct);
         var chuteToCarousel = await stats.ChuteToCarouselAsync(ct);
 
@@ -125,15 +129,5 @@ public sealed class PassengerQueries(
         static int Secs(DateTimeOffset t, DateTimeOffset now) => (int)Math.Max(0, Math.Round((t - now).TotalSeconds));
         return new EtaView(w.P10Utc, w.P50Utc, w.P90Utc,
             Secs(w.P10Utc, asOf), Secs(w.P50Utc, asOf), Secs(w.P90Utc, asOf), w.Basis);
-    }
-
-    private async Task<DateTimeOffset?> MaxEventTimeAsync(CancellationToken ct)
-    {
-        await using var cmd = db.CreateCommand(
-            // BSM mesajı zaman taşımaz (olay zamanı = alınma anı), bu yüzden sanal saati bozmasın diye dışarıda bırakılır.
-            "SELECT max(occurred_at_utc) FROM baggage_events WHERE message_type <> 'BSM'");
-        await using var r = await cmd.ExecuteReaderAsync(ct);
-        await r.ReadAsync(ct);
-        return r.IsDBNull(0) ? null : r.GetFieldValue<DateTimeOffset>(0);
     }
 }

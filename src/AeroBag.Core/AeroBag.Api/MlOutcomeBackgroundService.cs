@@ -1,4 +1,5 @@
 using AeroBag.Application.Ml;
+using AeroBag.Application.Time;
 using AeroBag.Infrastructure;
 
 namespace AeroBag.Api;
@@ -8,7 +9,7 @@ namespace AeroBag.Api;
 /// ML kapalıysa hiçbir şey yapmaz. Servis cevap vermezse uçuş işaretlenmez ve sonraki turda yeniden denenir.
 /// </summary>
 public sealed class MlOutcomeBackgroundService(
-    FlightContextStore store, IMlPredictor ml, ILogger<MlOutcomeBackgroundService> log) : BackgroundService
+    FlightContextStore store, IMlPredictor ml, IOperationalClock clock, ILogger<MlOutcomeBackgroundService> log) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(5);
 
@@ -53,7 +54,9 @@ public sealed class MlOutcomeBackgroundService(
             {
                 await ReportBagOutcomesAsync(stoppingToken);
 
-                foreach (var p in await store.PendingOutcomesAsync(stoppingToken))
+                var now = await clock.NowAsync(stoppingToken);
+                var pending = now is null ? new List<PendingOutcome>() : await store.PendingOutcomesAsync(now.Value, stoppingToken);
+                foreach (var p in pending)
                 {
                     // Tahmin önce istenir: servis, düzeltme hesabı için ham tahmini uçuş numarasıyla saklar.
                     if (await ml.PredictAsync(p.Context, stoppingToken) is null)

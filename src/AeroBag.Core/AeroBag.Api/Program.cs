@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using AeroBag.Api;
+using AeroBag.Application.Alerts;
 using AeroBag.Application.Ml;
 using AeroBag.Application.Time;
 using AeroBag.Application.TypeB;
@@ -47,6 +48,20 @@ builder.Services.AddSingleton<FlightContextStore>();
 builder.Services.AddSingleton<PassengerQueries>();
 builder.Services.AddSingleton<OpsQueries>();
 builder.Services.AddSingleton<SlaQueries>();
+
+// Kayıp bavul tespiti (Faz 6, W4). Tolerans süreleri DEMO varsayımıdır; Alerts__NotLoadedGraceMinutes ile değiştirilebilir.
+var alertPolicy = new AlertPolicy(
+    TimeSpan.FromMinutes(builder.Configuration.GetValue("Alerts:NotLoadedGraceMinutes", AlertPolicy.Default.NotLoadedGrace.TotalMinutes)),
+    TimeSpan.FromMinutes(builder.Configuration.GetValue("Alerts:MissingGraceMinutes", AlertPolicy.Default.MissingGrace.TotalMinutes)));
+if (alertPolicy.NotLoadedGrace < TimeSpan.Zero || alertPolicy.MissingGrace < TimeSpan.Zero)
+{
+    throw new InvalidOperationException("Alerts tolerans süreleri negatif olamaz.");
+}
+builder.Services.AddSingleton(alertPolicy);
+builder.Services.AddSingleton<FlightMilestoneStore>();
+builder.Services.AddSingleton<BagAlertService>();
+builder.Services.AddSingleton<BagAlertQueries>();
+builder.Services.AddHostedService<BagAlertBackgroundService>();
 
 // ExitGuard (Faz 4): çıkış kapısında bavul-PNR eşleştirmesi. Özellik bayrağı: ExitGuard:Enabled (varsayılan açık).
 var exitGuard = new ExitGuardOptions(
@@ -286,6 +301,23 @@ app.MapPost("/v1/flights/context", async (FlightContext body, FlightContextStore
     await store.UpsertAsync(body, ct);
     return Results.Accepted();
 }).WithMetadata(new RequireSourceScope(IngestScopes.Context));
+
+// AODB kilometre taşları (kalkış, varışta indirme bitti): kayıp bavul tespiti için. Kapsam 'context'.
+app.MapPost("/v1/flights/milestones", async (FlightMilestones body, FlightMilestoneStore store, CancellationToken ct) =>
+{
+    var error = body.Validate();
+    if (error is not null)
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    await store.UpsertAsync(body, ct);
+    return Results.Accepted();
+}).WithMetadata(new RequireSourceScope(IngestScopes.Context));
+
+// Açık kayıp bavul uyarıları (operasyon panosu).
+app.MapGet("/v1/alerts", async (BagAlertQueries alerts, CancellationToken ct) => Results.Ok(await alerts.OpenAsync(200, ct)))
+    .RequireAuthorization(Roles.StaffPolicy);
 
 app.MapExitGuard(exitGuard);
 

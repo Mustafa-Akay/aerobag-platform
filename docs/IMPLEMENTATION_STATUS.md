@@ -224,4 +224,44 @@ Bilinen sınırlar:
 - **API ve arayüz:** yolcu yanıtında her bavul için `carousel`; bavul kartında sarı "Bant N" etiketi (bavul banttan alınana kadar) ve bantta iken "Bagajınız N numaralı bantta". Operasyon tablosunda bant sütunu. Bant ML özelliği değildir, modele gönderilmez.
 - **Simülatör:** her uçuşun bandını bağlamla gönderir (`carousel`).
 - **Bilinen sınırlar:** simülatör bant değişikliği senaryosu üretmiyor (değişiklik testlerle doğrulanıyor). Bant, uçuş düzeyindedir; aynı uçuşun bavullarının farklı bantlara bölünmesi desteklenmiyor. BPM'deki `.Q` (hedef bant) alanı ayrıştırılıyor ama kullanılmıyor.
-- **Testler:** bant atanmadan önce yanıtta yok, atanınca var; bantta bekleyen bavulda da dönüyor; değişince yeni değer dönüyor ve uçuştaki tüm bavulları içeren tek bildirim yazılıyor; aynı bant ya da bantsız bağlam tekrar gelince bant korunuyor ve bildirim yazılmıyor; operasyon tablosunda görünüyor; uç nokta hatalı biçimi 400 ile reddediyor, veritabanı da CHECK ile; 0001'den 0002'ye yükseltmede mevcut bağlam satırları korunuyor.
+- **Testler (W3):** bant atanmadan önce yanıtta yok, atanınca var; bantta bekleyen bavulda da dönüyor; değişince yeni değer dönüyor ve uçuştaki tüm bavulları içeren tek bildirim yazılıyor; aynı bant ya da bantsız bağlam tekrar gelince bant korunuyor ve bildirim yazılmıyor; operasyon tablosunda görünüyor; uç nokta hatalı biçimi 400 ile reddediyor, veritabanı da CHECK ile; 0001'den 0002'ye yükseltmede mevcut bağlam satırları korunuyor.
+
+## Faz 6, W4 (ilk dilim): kayıp ve geciken bavul tespiti, ekranlar
+
+- **Sorun:** sistem bavulun nerede olduğunu söylüyordu ama gelmeyeceğini söylemiyordu. Uçağa yüklenmeyen ya da varışta indirilmeyen bavulun yolcusu bant başında boşuna bekliyordu. 28 Ekim canlı denemesinde de indirmesi geç başlayan bir uçuşta (ZZ0102) yolcu hiçbir bilgi görmedi.
+- **Model:** kayıp bavul bir **durum değil, uyarıdır**. Durum makinesi monoton kalır; bavul sonradan okunursa uyarı "bulundu" diye kapanır. Bir bavulda en fazla bir uyarı geçerlidir:
+  - `NOT_LOADED`: uçak kalktı (kalkıştan sonra tolerans süresi geçti) ve bavulun yükleme okuması yok. Varışta da sürer.
+  - `MISSING_AT_ARRIVAL`: varışta "indirme bitti" (tolerans süresi geçti) ve bavul indirilmedi. Kalkış zamanı bilinmiyorsa yükleme okuması olmayan bavul da buraya düşer.
+  - `ARRIVAL_DELAYED` saklanmaz, sorguda türetilir: on-block'tan sonra ilk bavul hedefi (SLA, varsayılan 15 dk) geçti ve uçuştan henüz hiç bavul inmedi.
+- **Kurallar** saf ve birim test edilir (`Application/Alerts/BagAlertRules`). Tolerans süreleri yapılandırılır (`Alerts:NotLoadedGraceMinutes`, `Alerts:MissingGraceMinutes`, varsayılan 10 dk) ve DEMO varsayımıdır.
+- **Veri modeli:** göç `0003_bag_alerts`:
+  - `flight_milestones` (kalkış, indirme bitti). Plandan sapma: alanlar `flight_context`'e değil ayrı tabloya kondu. Bunlar zaman içinde gelen olaylardır, ML'in sabit özellikleri değildir; bağlamdan önce de gelebilirler.
+  - `bag_alerts`: tür, açılış, kapanış, gerekçe (`FOUND`, `OFFLOADED`, `CLEARED`). Bir bavulda aynı türden tek açık uyarı (kısmi tekil indeks). Uygulama rolü uyarı silemez; kapanış tek kez yazılır (tetikleyici); güncelleme yetkisi yalnızca kapanış sütunlarında.
+  - `bags(flight_id)` indeksi.
+- **Akış:**
+  - `POST /v1/flights/milestones` (imzalı, kapsam `context`); verilmeyen alan kayıtlı değeri korur.
+  - `BagAlertBackgroundService` 5 sn'de bir, operasyon saatiyle (W2) kuralı uygular ve farkı yazar. Tek örnek çalışır (danışma kilidi).
+  - Her açılış ve kapanış için içeriksiz canlı bildirim yazılır (outbox `bag.alerts`).
+- **API ve arayüz:**
+  - **Yolcu yanıtı:** her bavul için `notice` alanı. Açık uyarıda ETA verilmez; işçi henüz kapatmamış ama bavul okunmuşsa eski uyarı gösterilmez.
+  - **Yolcu kartı:** sakin dilde bir kutu, "yüklendiğine dair kayıt bulunamadı" ya da "indirme tamamlandı, bavulunuz okunmadı". Varışta bulunamayan bavulda bant numarası gizlenir. Gecikmede "indirme beklenenden geç başladı" yazar.
+  - **Operasyon panosu:** "Eksik" sütunu ve "Eksik bavullar" listesi (`GET /v1/alerts`, personel).
+- **Simülatör:** kalkış ve indirme bitti zamanlarını bağlamla birlikte, baştan gönderiyor. Gerçek AODB bunları olay anında gönderir. Kural yalnızca zamanı geçince uyarı açtığından sonuç değişmez.
+- **Ek düzeltme (canlı denemede bulundu):** aynı PNR ve soyad iki günün simülasyonunda da vardı, yolcu sorgusu iki seyahati birden döndürüyordu. PNR'lar gerçekte de zamanla yeniden kullanılır. Artık yalnızca en son uçuş tarihindeki bavullar döner; böylece PNR'ı bilen biri eski bir seyahati göremez (veri en aza indirme).
+- **Bilinen sınırlar:**
+  - **Etiket numarası tekrarı:** yolcu jetonu bavulu yalnızca etiket numarasıyla tanır. Etiketler de zamanla yeniden kullanıldığından jetonun uçuşla birlikte kapsanması gerekir (W12'ye not edildi).
+  - **Okuyucu kaçırması:** uyarı bir tespittir, hüküm değildir. Kaçırılan bir yükleme okuması (`--drop-rate`) yanlış bir `NOT_LOADED` uyarısı üretir ve bu uyarı varışta bavul okunana kadar açık kalır. Yolcu metni bu yüzden "kayıt bulunamadı" der. Oranı W4c ölçecek; azaltmak W5'in (okuma kapsamı) konusudur.
+  - **Simülatör senaryoları:** yüklenmeyen ve kaybolan bavul senaryoları ile tespit oranı, yanlış uyarı ve tespit gecikmesi ölçümü W4c'dedir.
+  - **Kapsam dışı:** WorldTracer/PIR entegrasyonu.
+- **Testler:**
+  - **Birim:** sınır süreler, tek uyarı kuralı, kapanış gerekçeleri, eski uyarının gizlenmesi, gecikme kuralı, kilometre taşı doğrulaması.
+  - **Entegrasyon (uygulama rolüyle):**
+    - Uyarı tolerans süresinden önce açılmıyor, sonra açılıyor.
+    - Sonradan okunan bavulda uyarı `FOUND` ile kapanıyor; uçağa alınmayan bavulda `OFFLOADED` ile.
+    - Tekrar taramada uyarı çoğalmıyor.
+    - Hiç yüklenmeyen bavul varışta tek uyarıyla kalıyor.
+    - Kapanmış uyarı değiştirilemiyor, uyarı silinemiyor.
+    - Ops özeti ve listesi uyarıyı gösteriyor.
+    - Yolcu yanıtında bildirim var, ETA yok.
+    - Gecikme bildirimi ilk bavul inince kalkıyor.
+    - Kilometre taşı ucu imza istiyor, değerleri birleştiriyor ve doğruluyor.

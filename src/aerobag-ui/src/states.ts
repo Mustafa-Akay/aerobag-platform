@@ -1,3 +1,5 @@
+import type { BagNotice } from "./api";
+
 /** Bagaj yaşam döngüsünün yolcuya gösterilen adımları (docs/ARCHITECTURE.md bölüm 3.1). */
 export const STEPS = [
   { state: "CHECKED_IN", short: "Teslim edildi", message: "Bagajınız teslim alındı." },
@@ -17,6 +19,30 @@ export function stepIndex(state: string): number {
     return STEPS.length - 1;
   }
   return STEPS.findIndex((s) => s.state === state);
+}
+
+/**
+ * Kayıp/geciken bavul bildirimleri (W4). Bir uyarı kesin hüküm değildir (okuyucu kaçırması da aynı izi bırakır);
+ * bu yüzden metin "kayıt bulunamadı" der, alarm dili kullanmaz ve ne yapılacağını söyler.
+ */
+export const NOTICE_TEXT: Record<BagNotice, { title: string; body: string }> = {
+  NOT_LOADED: {
+    title: "Uçağa yüklendiğine dair kayıt bulunamadı",
+    body: "Bu bazen yalnızca bir okuma eksikliğidir. Varışta bavulunuz banda gelmezse bagaj hizmetlerine başvurun; bavulunuz okunursa bu sayfa güncellenir.",
+  },
+  MISSING_AT_ARRIVAL: {
+    title: "Uçaktan indirme tamamlandı, bavulunuz okunmadı",
+    body: "Bant başında beklemek yerine bagaj hizmetlerine başvurun. Bavulunuz okunursa bu sayfa güncellenir.",
+  },
+  ARRIVAL_DELAYED: {
+    title: "Bavul indirme beklenenden geç başladı",
+    body: "Uçak park yerinde, bavullar henüz indirilmedi. İndirme başlayınca bu sayfa güncellenir.",
+  },
+};
+
+/** Varışta bulunamayan bavulda bant numarası gösterilmez: yolcuyu bant başında bekletmemek için. */
+export function hidesCarousel(notice: BagNotice | null): boolean {
+  return notice === "MISSING_AT_ARRIVAL";
 }
 
 const CLAIMED_INDEX = STEPS.findIndex((s) => s.state === "CLAIMED_FROM_BELT");
@@ -40,4 +66,11 @@ export function stateMessage(state: string, carousel: string | null = null): str
   }
   const i = stepIndex(state);
   return i >= 0 ? STEPS[i].message : "Bagajınızın durumu güncelleniyor.";
+}
+
+/** Kısa durum adı (operasyon tablosu için). */
+export function stateLabel(state: string): string {
+  if (state === "OFFLOADED_NO_SHOW") return "Uçağa alınmadı";
+  const step = STEPS.find((s) => s.state === state);
+  return step ? step.short : state;
 }

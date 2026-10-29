@@ -186,7 +186,8 @@ public static class FlightGenerator
         }
 
         var info = new FlightInfo(flightId, flightNumber, date, regime, aircraft, wide, rain ? "RAIN" : "CLEAR",
-            standDist, chuteDist, speed, carousel, bagCount, onBlock, 0, handler);
+            standDist, chuteDist, speed, carousel, bagCount, onBlock, 0, handler,
+            DepartedUtc: departure, UnloadingCompletedUtc: unload.Max());
 
         return new FlightResult(info, bags, messages.OrderBy(m => m.TimeUtc).ToList());
     }

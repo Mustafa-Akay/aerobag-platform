@@ -15,7 +15,11 @@ export type PassengerBag = {
   eta: EtaView | null;
   /** Uçuşa atanan bagaj bandı; henüz atanmadıysa null. */
   carousel: string | null;
+  /** Kayıp/geciken bavul bildirimi (W4); yoksa null. */
+  notice: BagNotice | null;
 };
+
+export type BagNotice = "NOT_LOADED" | "MISSING_AT_ARRIVAL" | "ARRIVAL_DELAYED";
 
 export type LookupResult = {
   asOfUtc: string;
@@ -43,7 +47,21 @@ export type FlightSummary = {
   lastCarouselUtc: string | null;
   firstBagMinutes: number | null;
   carousel: string | null;
+  /** Açık kayıp bavul uyarısı sayısı. */
+  openAlerts: number;
 };
+
+export type OpenAlert = {
+  bagTag: string;
+  flightId: string;
+  kind: "NOT_LOADED" | "MISSING_AT_ARRIVAL";
+  state: string;
+  openedAtUtc: string;
+};
+
+export function getAlerts(token: string, signal?: AbortSignal): Promise<OpenAlert[]> {
+  return getJson<OpenAlert[]>("/v1/alerts", signal, token);
+}
 
 export type SlaStatus = "MET" | "BREACHED" | "ON_TRACK" | "AT_RISK" | "LIKELY_BREACH" | "UNKNOWN";
 

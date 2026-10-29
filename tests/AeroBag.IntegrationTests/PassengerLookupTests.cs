@@ -72,6 +72,19 @@ public class PassengerLookupTests(PostgresFixture fx) : IClassFixture<PostgresFi
     }
 
     [Fact]
+    public async Task Reused_pnr_returns_only_the_latest_trip()
+    {
+        // PNR'lar zamanla yeniden kullanılır; simülatör de her gün aynı tohumla aynı PNR, soyad ve etiketi üretir.
+        var tag = NewTag();
+        var pnr = NewPnr();
+        await Processor().ProcessAsync($"BSM\n.V/1LAYT\n.F/ZZ0130/20OCT/AYT/Y\n.N/{tag}001\n.W/K/1/18\n.P/YILMAZ/AYSE\n.L/{pnr}\nENDBSM", "test");
+        await Processor().ProcessAsync($"BSM\n.V/1LAYT\n.F/ZZ0130/21OCT/AYT/Y\n.N/{tag}001\n.W/K/1/18\n.P/YILMAZ/AYSE\n.L/{pnr}\nENDBSM", "test");
+
+        var bag = Assert.Single((await Queries().LookupAsync(pnr, "YILMAZ"))!.Bags);
+        Assert.Equal("ZZ0130-20261021", bag.FlightId);
+    }
+
+    [Fact]
     public async Task Unloaded_bag_gets_an_ordered_eta_window()
     {
         var tag = NewTag();

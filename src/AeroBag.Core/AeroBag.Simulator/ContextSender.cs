@@ -34,6 +34,18 @@ public static class ContextSender
                 using var req = creds.SignedPost("/v1/flights/context", json, "application/json; charset=utf-8");
                 using var resp = await http.SendAsync(req, ct);
                 if (resp.IsSuccessStatusCode) ok++;
+
+                // Kilometre taşları (W4). Gerçek AODB bunları olay anında gönderir; simülatör şimdilik baştan gönderiyor.
+                // Kural yalnızca zamanı geçince uyarı açtığı için sonuç aynıdır (operasyon saati olaylardan ilerler).
+                if (f.DepartedUtc is not null || f.UnloadingCompletedUtc is not null)
+                {
+                    var ms = JsonSerializer.SerializeToUtf8Bytes(new
+                    {
+                        flightId = f.FlightId, departedUtc = f.DepartedUtc, unloadingCompletedUtc = f.UnloadingCompletedUtc,
+                    }, Json);
+                    using var mreq = creds.SignedPost("/v1/flights/milestones", ms, "application/json; charset=utf-8");
+                    using var mresp = await http.SendAsync(mreq, ct);
+                }
             }
             catch (HttpRequestException)
             {

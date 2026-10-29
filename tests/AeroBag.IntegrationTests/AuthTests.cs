@@ -65,6 +65,7 @@ public sealed class AuthTests(PostgresFixture fx) : IClassFixture<PostgresFixtur
         var client = _factory.CreateClient();
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/v1/flights")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/v1/flights/sla")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/v1/alerts")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/v1/bags/1234567890")).StatusCode);
     }
 
@@ -89,6 +90,7 @@ public sealed class AuthTests(PostgresFixture fx) : IClassFixture<PostgresFixtur
             var token = await LoginAsync(client, user, pass);
             Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Get("/v1/flights", token))).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Get("/v1/flights/sla", token))).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Get("/v1/alerts", token))).StatusCode);
         }
     }
 
@@ -101,6 +103,7 @@ public sealed class AuthTests(PostgresFixture fx) : IClassFixture<PostgresFixtur
 
         Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(Get("/v1/flights", token))).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(Get("/v1/flights/sla", token))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(Get("/v1/alerts", token))).StatusCode);
     }
 
     [Fact]

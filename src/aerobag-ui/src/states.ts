@@ -26,9 +26,10 @@ export function stepIndex(state: string): number {
  * bu yüzden metin "kayıt bulunamadı" der, alarm dili kullanmaz ve ne yapılacağını söyler.
  */
 export const NOTICE_TEXT: Record<BagNotice, { title: string; body: string }> = {
+  // Yolcuya yalnızca varışta, indirme bittikten sonra gösterilir (personel kalkıştan sonra görür).
   NOT_LOADED: {
-    title: "Uçağa yüklendiğine dair kayıt bulunamadı",
-    body: "Bu bazen yalnızca bir okuma eksikliğidir. Varışta bavulunuz banda gelmezse bagaj hizmetlerine başvurun; bavulunuz okunursa bu sayfa güncellenir.",
+    title: "Bavulunuzun bu uçağa yüklendiğine dair kayıt yok",
+    body: "Uçaktan indirme tamamlandı ve bavulunuz okunmadı. Bant başında beklemek yerine bagaj hizmetlerine başvurun. Bavulunuz okunursa bu sayfa güncellenir.",
   },
   MISSING_AT_ARRIVAL: {
     title: "Uçaktan indirme tamamlandı, bavulunuz okunmadı",
@@ -40,9 +41,9 @@ export const NOTICE_TEXT: Record<BagNotice, { title: string; body: string }> = {
   },
 };
 
-/** Varışta bulunamayan bavulda bant numarası gösterilmez: yolcuyu bant başında bekletmemek için. */
+/** Uyarı varsa bant numarası gösterilmez: yolcuyu bant başında bekletmemek için (iki uyarı da varışta gösterilir). */
 export function hidesCarousel(notice: BagNotice | null): boolean {
-  return notice === "MISSING_AT_ARRIVAL";
+  return notice === "MISSING_AT_ARRIVAL" || notice === "NOT_LOADED";
 }
 
 const CLAIMED_INDEX = STEPS.findIndex((s) => s.state === "CLAIMED_FROM_BELT");

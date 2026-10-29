@@ -108,9 +108,9 @@ public sealed class BagAlertTests(PostgresFixture fx) : IClassFixture<PostgresFi
         Assert.Equal(L((BagAlertKind.NotLoaded, null)), await AlertsOfAsync(missing));
         Assert.Empty(await AlertsOfAsync(loaded));
 
-        var bag = Assert.Single((await Lookup(At("081000")).LookupAsync(pnr, "YILMAZ"))!.Bags);
-        Assert.Equal(BagAlertKind.NotLoaded, bag.Notice);
-        Assert.Null(bag.Eta);
+        // Personel görür; yolcu kalkışta görmez (yanlış uyarıların çoğu kaçırılan okumadır, EVALUATION.md).
+        Assert.Contains(await new BagAlertQueries(_app).OpenAsync(), a => a.BagTag == missing && a.Kind == BagAlertKind.NotLoaded);
+        Assert.Null(Assert.Single((await Lookup(At("081000")).LookupAsync(pnr, "YILMAZ"))!.Bags).Notice);
 
         // Okuma geç işlendi: bavul aslında yüklenmiş.
         await ScanAsync("ZZ0801", missing, "LOAD02", "075500");
@@ -127,10 +127,11 @@ public sealed class BagAlertTests(PostgresFixture fx) : IClassFixture<PostgresFi
         var (unloaded, _) = await BagAsync("ZZ0802", ("LOAD02", "074000"), ("UNLOAD", "121500"));
         await MilestonesAsync("ZZ0802", "080000", "122000");
 
-        await Alerts().ScanAsync(At("122959"));
+        // Varış toleransı (varsayılan 5 dk) indirme bittiden sonra.
+        await Alerts().ScanAsync(At("122459"));
         Assert.Empty(await AlertsOfAsync(missing));
 
-        await Alerts().ScanAsync(At("123000"));
+        await Alerts().ScanAsync(At("122500"));
         Assert.Equal(L((BagAlertKind.MissingAtArrival, null)), await AlertsOfAsync(missing));
         Assert.Empty(await AlertsOfAsync(unloaded));
 
@@ -144,6 +145,22 @@ public sealed class BagAlertTests(PostgresFixture fx) : IClassFixture<PostgresFi
         await Alerts().ScanAsync(At("123600"));
         Assert.Equal(L((BagAlertKind.MissingAtArrival, BagAlertCloseReason.Found)), await AlertsOfAsync(missing));
         Assert.DoesNotContain(await new BagAlertQueries(_app).OpenAsync(), a => a.BagTag == missing);
+    }
+
+    [Fact]
+    public async Task Not_loaded_is_shown_to_the_passenger_only_after_unloading_completed()
+    {
+        var (tag, pnr) = await BagAsync("ZZ0808", ("SEC01", "063000"));
+        await BagAsync("ZZ0808", ("LOAD02", "074000"), ("UNLOAD", "121500"));
+        await MilestonesAsync("ZZ0808", "080000", "122000");
+        await Alerts().ScanAsync(At("081000"));
+        Assert.Equal(L((BagAlertKind.NotLoaded, null)), await AlertsOfAsync(tag));
+
+        Assert.Null(Assert.Single((await Lookup(At("122459")).LookupAsync(pnr, "YILMAZ"))!.Bags).Notice);
+
+        var bag = Assert.Single((await Lookup(At("122500")).LookupAsync(pnr, "YILMAZ"))!.Bags);
+        Assert.Equal(BagAlertKind.NotLoaded, bag.Notice);
+        Assert.Null(bag.Eta);
     }
 
     [Fact]

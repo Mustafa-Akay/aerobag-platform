@@ -110,8 +110,30 @@ public static class FlightGenerator
             claim[i] = carouselT[i].AddSeconds(20 + rng.Exp(120));
         }
 
-        var firstIdx = Array.IndexOf(carouselT, carouselT.Min());
-        var lastIdx = Array.IndexOf(carouselT, carouselT.Max());
+        // W4 senaryoları: ayrı rastgele akış, böylece oranlar sıfırken üretilen veri (CSV, ML eğitimi) hiç değişmez.
+        var fates = new string?[bagCount];
+        if (o.NotLoadedRate > 0 || o.MissingRate > 0)
+        {
+            var fateRng = new SimRandom(unchecked(o.Seed * 31337 + index));
+            for (var i = 0; i < bagCount; i++)
+            {
+                var u = fateRng.Uniform(0, 1);
+                fates[i] = u < o.NotLoadedRate ? BagFate.NotLoaded
+                    : u < o.NotLoadedRate + o.MissingRate ? BagFate.MissingAtArrival
+                    : null;
+            }
+        }
+        var delivered = Enumerable.Range(0, bagCount).Where(i => fates[i] is null).ToList();
+        if (delivered.Count == 0)
+        {
+            fates[0] = null; // en az bir bavul banda gelsin (ilk/son bavul ve indirme bitti zamanı tanımlı kalsın)
+            delivered.Add(0);
+        }
+
+        // İlk/son bavul, indirme bitti: yalnızca gerçekten indirilen bavullar arasında.
+        var firstIdx = delivered.MinBy(i => carouselT[i]);
+        var lastIdx = delivered.MaxBy(i => carouselT[i]);
+        var unloadingCompleted = delivered.Max(i => unload[i]);
 
         var departure = onBlock.AddMinutes(-(210 + rng.Uniform(-10, 10)));
         var bags = new List<BagTruth>(bagCount);
@@ -140,15 +162,23 @@ public static class FlightGenerator
             var given = rng.Pick(Givens);
 
             bags.Add(new BagTruth(flightId, tag, i, checkIn, security, loaded, unload[i], chute[i],
-                carouselT[i], claim[i], i == firstIdx, i == lastIdx, pnr, surname));
+                carouselT[i], claim[i], i == firstIdx, i == lastIdx, pnr, surname, fates[i]));
 
             messages.Add(new ScheduledMessage(checkIn,
                 MessageFormatter.Bsm(flightNumber, date, tag, rng.Int(8, 31), surname, given, pnr),
                 tag, "BSM"));
             messages.Add(new ScheduledMessage(security,
                 MessageFormatter.Bpm(flightNumber, date, tag, "SEC01", security), tag, "SEC"));
+            if (fates[i] == BagFate.NotLoaded)
+            {
+                continue; // güvenlikten geçti, uçağa yüklenmedi
+            }
             messages.Add(new ScheduledMessage(loaded,
                 MessageFormatter.Bpm(flightNumber, date, tag, "LOAD02", loaded), tag, "LOAD"));
+            if (fates[i] == BagFate.MissingAtArrival)
+            {
+                continue; // yüklendi, varışta indirilmedi (uçakta kaldı ya da yanlış yere gitti)
+            }
             messages.Add(new ScheduledMessage(unload[i],
                 MessageFormatter.Bum(flightNumber, date, tag, stand, unload[i]), tag, "BUM"));
             messages.Add(new ScheduledMessage(chute[i],
@@ -163,7 +193,7 @@ public static class FlightGenerator
         {
             // ExitGuard kapı paketleri: sahip, aile, başkası, zayıf sinyal, yanlış okuma, yan koridor (GateModel).
             var gateRng = new SimRandom(unchecked(o.Seed * 100003 + index));
-            foreach (var g in GateModel.Plan(bags, gateRng))
+            foreach (var g in GateModel.Plan(bags.Where(b => b.Fate is null).ToList(), gateRng))
             {
                 messages.Add(new ScheduledMessage(g.TimeUtc, g.ToJson(), g.Tags[0], "GATE", g));
             }
@@ -172,7 +202,7 @@ public static class FlightGenerator
         {
             // Ayrı rastgele akış: çıkış taramaları açılıp kapanınca diğer verinin (CSV, ML eğitimi) değişmemesi için.
             var exitRng = new SimRandom(unchecked(o.Seed * 100003 + index));
-            for (var i = 0; i < bagCount; i++)
+            foreach (var i in delivered)
             {
                 // %2 bavul çıkış kapısında hiç okunmaz (etiket sorunu, başka çıkış, okuyucu kaçırması).
                 if (exitRng.Chance(ExitMissChance))
@@ -187,7 +217,7 @@ public static class FlightGenerator
 
         var info = new FlightInfo(flightId, flightNumber, date, regime, aircraft, wide, rain ? "RAIN" : "CLEAR",
             standDist, chuteDist, speed, carousel, bagCount, onBlock, 0, handler,
-            DepartedUtc: departure, UnloadingCompletedUtc: unload.Max());
+            DepartedUtc: departure, UnloadingCompletedUtc: unloadingCompleted);
 
         return new FlightResult(info, bags, messages.OrderBy(m => m.TimeUtc).ToList());
     }

@@ -3,12 +3,36 @@ using AeroBag.Domain;
 
 namespace AeroBag.UnitTests;
 
-/// <summary>W4: kayıp ve geciken bavul kuralları (saf). Tolerans 10 dk (varsayılan).</summary>
+/// <summary>W4: kayıp ve geciken bavul kuralları (saf). Testler varsayılana bağlı kalmasın diye toleranslar açıkça 10/10 dk.</summary>
 public class BagAlertRulesTests
 {
     private static readonly DateTimeOffset Departed = new(2026, 10, 22, 8, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset Unloaded = new(2026, 10, 22, 12, 20, 0, TimeSpan.Zero);
-    private static readonly AlertPolicy P = AlertPolicy.Default;
+    private static readonly AlertPolicy P = new(TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
+
+    [Fact]
+    public void Default_grace_periods_are_the_ones_chosen_by_the_measurement()
+    {
+        // docs/EVALUATION.md, "Kayıp bavul uyarısı": varışta 5 dk.
+        Assert.Equal(TimeSpan.FromMinutes(10), AlertPolicy.Default.NotLoadedGrace);
+        Assert.Equal(TimeSpan.FromMinutes(5), AlertPolicy.Default.MissingGrace);
+    }
+
+    [Fact]
+    public void Not_loaded_is_shown_to_the_passenger_only_after_unloading_completed()
+    {
+        Assert.False(BagAlertRules.VisibleToPassenger(BagAlertKind.NotLoaded, BagState.SecurityScreened, null, Unloaded.AddHours(1), P));
+        Assert.False(BagAlertRules.VisibleToPassenger(BagAlertKind.NotLoaded, BagState.SecurityScreened, Unloaded, Unloaded.AddMinutes(9), P));
+        Assert.True(BagAlertRules.VisibleToPassenger(BagAlertKind.NotLoaded, BagState.SecurityScreened, Unloaded, Unloaded.AddMinutes(10), P));
+        Assert.False(BagAlertRules.VisibleToPassenger(BagAlertKind.NotLoaded, BagState.LoadedOnAircraft, Unloaded, Unloaded.AddMinutes(10), P));
+    }
+
+    [Fact]
+    public void Missing_at_arrival_is_shown_to_the_passenger_while_it_applies()
+    {
+        Assert.True(BagAlertRules.VisibleToPassenger(BagAlertKind.MissingAtArrival, BagState.LoadedOnAircraft, Unloaded, Unloaded.AddMinutes(10), P));
+        Assert.False(BagAlertRules.VisibleToPassenger(BagAlertKind.MissingAtArrival, BagState.InboundChute, Unloaded, Unloaded.AddMinutes(10), P));
+    }
 
     [Theory]
     [InlineData(BagState.CheckedIn)]

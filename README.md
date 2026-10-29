@@ -70,6 +70,7 @@ dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode live --speed 5
 - **Yolcu sayfası:** simülatör başlangıçta örnek PNR ve soyadları yazdırır, bunlarla yolcu sayfasında sorgu yapılır.
 - **Operasyon panosu:** giriş ister. Demo kullanıcıları yalnızca yerel demo içindir: `ops` / `ops-demo-2026` ve `security` / `security-demo-2026`. Güvenlik rolüyle girince çıkış inceleme kayıtları görünür.
 - **ExitGuard değerlendirmesi:** `dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode gate-eval` komutu kuralın sinyal eşiğine göre yanlış alarm ve yakalama oranlarını API'siz hesaplar.
+- **Kayıp bavul uyarısı değerlendirmesi:** `dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode alert-eval` komutu yüklenmeyen ve varışta bulunmayan bavulların yakalanma oranını, tespit gecikmesini ve okuma kaybından doğan yanlış uyarıları tolerans süresine göre API'siz hesaplar.
 - **Şema değişince:** göç aracını yeniden çalıştırın; veri korunur. API, veritabanı kodun beklediği sürümde değilse açılmaz ve ne yapılacağını söyler.
 
 Gerçek bir kurulumda verilmesi gereken anahtarlar (`Auth__SigningKey`, `Ingest__Sources__*`, `Security__LookupKeySecret`, `ConnectionStrings__Default`) ve simülatörün bütün seçenekleri (`--help`) için [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md)'ye bakın.

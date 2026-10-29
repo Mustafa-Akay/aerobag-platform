@@ -233,7 +233,7 @@ Bilinen sınırlar:
   - `NOT_LOADED`: uçak kalktı (kalkıştan sonra tolerans süresi geçti) ve bavulun yükleme okuması yok. Varışta da sürer.
   - `MISSING_AT_ARRIVAL`: varışta "indirme bitti" (tolerans süresi geçti) ve bavul indirilmedi. Kalkış zamanı bilinmiyorsa yükleme okuması olmayan bavul da buraya düşer.
   - `ARRIVAL_DELAYED` saklanmaz, sorguda türetilir: on-block'tan sonra ilk bavul hedefi (SLA, varsayılan 15 dk) geçti ve uçuştan henüz hiç bavul inmedi.
-- **Kurallar** saf ve birim test edilir (`Application/Alerts/BagAlertRules`). Tolerans süreleri yapılandırılır (`Alerts:NotLoadedGraceMinutes`, `Alerts:MissingGraceMinutes`, varsayılan 10 dk) ve DEMO varsayımıdır.
+- **Kurallar** saf ve birim test edilir (`Application/Alerts/BagAlertRules`). Tolerans süreleri yapılandırılır (`Alerts:NotLoadedGraceMinutes` varsayılan 10 dk, `Alerts:MissingGraceMinutes` varsayılan 5 dk). Varış toleransı W4c ölçümüyle seçildi; saha verisiyle yeniden seçilmelidir.
 - **Veri modeli:** göç `0003_bag_alerts`:
   - `flight_milestones` (kalkış, indirme bitti). Plandan sapma: alanlar `flight_context`'e değil ayrı tabloya kondu. Bunlar zaman içinde gelen olaylardır, ML'in sabit özellikleri değildir; bağlamdan önce de gelebilirler.
   - `bag_alerts`: tür, açılış, kapanış, gerekçe (`FOUND`, `OFFLOADED`, `CLEARED`). Bir bavulda aynı türden tek açık uyarı (kısmi tekil indeks). Uygulama rolü uyarı silemez; kapanış tek kez yazılır (tetikleyici); güncelleme yetkisi yalnızca kapanış sütunlarında.
@@ -243,10 +243,10 @@ Bilinen sınırlar:
   - `BagAlertBackgroundService` 5 sn'de bir, operasyon saatiyle (W2) kuralı uygular ve farkı yazar. Tek örnek çalışır (danışma kilidi).
   - Her açılış ve kapanış için içeriksiz canlı bildirim yazılır (outbox `bag.alerts`).
 - **API ve arayüz:**
-  - **Yolcu yanıtı:** her bavul için `notice` alanı. Açık uyarıda ETA verilmez; işçi henüz kapatmamış ama bavul okunmuşsa eski uyarı gösterilmez.
-  - **Yolcu kartı:** sakin dilde bir kutu, "yüklendiğine dair kayıt bulunamadı" ya da "indirme tamamlandı, bavulunuz okunmadı". Varışta bulunamayan bavulda bant numarası gizlenir. Gecikmede "indirme beklenenden geç başladı" yazar.
+  - **Yolcu yanıtı:** her bavul için `notice` alanı. Açık uyarıda ETA verilmez; işçi henüz kapatmamış ama bavul okunmuşsa eski uyarı gösterilmez. **`NOT_LOADED` yolcuya yalnızca varışta, "indirme bitti" toleransı geçince gösterilir** (W4c ölçümünden sonra; personel kalkıştan sonra görür).
+  - **Yolcu kartı:** sakin dilde bir kutu, "bu uçağa yüklendiğine dair kayıt yok" ya da "indirme tamamlandı, bavulunuz okunmadı". Uyarıda bant numarası gizlenir. Gecikmede "indirme beklenenden geç başladı" yazar.
   - **Operasyon panosu:** "Eksik" sütunu ve "Eksik bavullar" listesi (`GET /v1/alerts`, personel).
-- **Simülatör:** kalkış ve indirme bitti zamanlarını bağlamla birlikte, baştan gönderiyor. Gerçek AODB bunları olay anında gönderir. Kural yalnızca zamanı geçince uyarı açtığından sonuç değişmez.
+- **Simülatör:** kalkış ve indirme bitti zamanlarını gönderir (W4c'den beri olay anında, bkz. aşağı).
 - **Ek düzeltme (canlı denemede bulundu):** aynı PNR ve soyad iki günün simülasyonunda da vardı, yolcu sorgusu iki seyahati birden döndürüyordu. PNR'lar gerçekte de zamanla yeniden kullanılır. Artık yalnızca en son uçuş tarihindeki bavullar döner; böylece PNR'ı bilen biri eski bir seyahati göremez (veri en aza indirme).
 - **Bilinen sınırlar:**
   - **Etiket numarası tekrarı:** yolcu jetonu bavulu yalnızca etiket numarasıyla tanır. Etiketler de zamanla yeniden kullanıldığından jetonun uçuşla birlikte kapsanması gerekir (W12'ye not edildi).
@@ -265,3 +265,35 @@ Bilinen sınırlar:
     - Yolcu yanıtında bildirim var, ETA yok.
     - Gecikme bildirimi ilk bavul inince kalkıyor.
     - Kilometre taşı ucu imza istiyor, değerleri birleştiriyor ve doğruluyor.
+
+## Faz 6, W4c: kayıp bavul senaryoları ve ölçüm
+
+- **Senaryolar (simülatör):** `--not-loaded-rate` (varsayılan %0,3) ve `--missing-rate` (varsayılan %0,2), canlı modda ve ölçümde açık.
+  - Yüklenmeyen bavulun BSM ve güvenlik okuması olur, sonrası olmaz. Varışta bulunmayan bavul yüklenir, sonra iz kaybolur.
+  - Toplam %0,5, kamuya açık oranlarla aynı mertebede: ABD Ulaştırma Bakanlığı 2024 için her 100 bavulda 0,55 yanlış işlenen bavul bildiriyor. SITA'ya göre yanlış işlenen bavulların %16'sı yükleme hatasından. Simülatörde aktarma yok.
+  - Senaryolar ayrı bir rastgele akış kullanır; diğer bavulların verisi değişmez. CSV (ML eğitimi) senaryo bavullarını içermez ve CSV modunda oranlar varsayılan olarak sıfırdır.
+  - İlk ve son bavul ile "indirme bitti" zamanı yalnızca gerçekten indirilen bavullardan hesaplanır.
+  - Canlı modda senaryo bavullarının PNR ve soyadı yazdırılır; yolcu sayfasında uyarıyı görmek için kullanılabilir.
+- **Kilometre taşları olay anında:** kalkış ve "indirme bitti" artık bavul okumalarıyla aynı zaman çizelgesinde, olay anında gönderilir (`MILESTONE` türü). AODB beslemesi güvenilir kabul edilir: iletim gürültüsü yalnızca bavul okumalarına uygulanır.
+- **Ölçüm:** `--mode alert-eval` (varsayılan 200 uçuş). Kural API'dekinin aynısıdır (`BagAlertRules`).
+  - Okuma kaybı canlı göndericideki gibi modellenir (düşme, sonra bozulma). Bozuk mesaj ayrıştırılamaz, kayıp sayılır.
+  - Bavulun durumu kendisine ulaşan okumaların en ilerisidir; API'deki durum makinesinin davranışı budur.
+  - Uyarı işçisinin gecikmesi (≤5 sn) sıfır kabul edilir.
+  - Ölçütler:
+    - yakalama oranı: yüklenmeyende inişten önce; varışta bulunmayanda hem genel hem bant boşalmadan önce;
+    - tespit gecikmesi;
+    - okuma kaybından doğan yanlış uyarı (1000 bavulda);
+    - yanlış uyarının ne kadar süre açık kaldığı.
+  - Sonuçlar `EVALUATION.md`'dedir ("Kayıp bavul uyarısı"). Özet: yüklenmeyen bavulların hepsi inişten önce personel ekranına düşüyor, ama bu uyarıların ~5'te 4'ü kaçırılan yükleme okumasından doğan yanlış uyarı ve varışa kadar açık kalıyordu.
+  - **Bu ölçüme göre değişenler:** varış toleransı 10 dk'dan 5 dk'ya indi; NOT_LOADED yolcuya yalnızca varışta, "indirme bitti" toleransı geçince gösteriliyor.
+  - **Sonuç:** yolcuya giden yanlış uyarı 1000 bavulda 15,5'ten 1,8'e düştü; gerçek vakaların %89'unda yolcu bant boşalmadan haberdar oluyor.
+- **Bilinen sınır:** NOT_LOADED yolcuya görünür hale geldiğinde ayrıca canlı bildirim gitmiyor; yolcu sayfası en geç 20 saniyede (canlı bağlantıda) ya da 3 saniyede kendini yeniliyor.
+- **Testler:**
+  - senaryolar normal bavulların verisini değiştirmiyor;
+  - senaryo bavullarının mesajları doğru yerde kesiliyor;
+  - ilk/son bavul ve "indirme bitti" yalnızca indirilen bavullardan;
+  - kilometre taşları doğru anda planlanıyor;
+  - kayıpsız durumda her senaryo bavulu tam tolerans süresinde yakalanıyor ve hiç yanlış uyarı yok;
+  - okuma kaybı yanlış uyarı üretiyor ve çoğu sonraki okumayla kapanıyor;
+  - aynı tohum aynı ölçümü veriyor;
+  - uyarı geçmişi tolerans sınırında açılıp sonraki okumada kapanıyor.

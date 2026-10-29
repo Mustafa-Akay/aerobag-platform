@@ -21,7 +21,9 @@ public sealed record FlightInfo(
     int TotalBags,
     DateTimeOffset OnBlockUtc,
     int ArrivalsLast30Min,
-    string GroundHandler);
+    string GroundHandler,
+    DateTimeOffset? DepartedUtc = null,
+    DateTimeOffset? UnloadingCompletedUtc = null);
 
 /// <summary>Simülatörün bildiği gerçek zamanlar (mesajlar kayıp olsa bile bunlar eksiksizdir).</summary>
 public sealed record BagTruth(

@@ -1,3 +1,4 @@
+using AeroBag.Application.Alerts;
 using AeroBag.Application.Eta;
 using AeroBag.Application.Ml;
 using AeroBag.Application.Time;
@@ -13,7 +14,11 @@ public sealed record EtaView(
     string Basis);
 
 /// <param name="Carousel">Uçuşa atanan bagaj bandı (AODB bağlamı); henüz atanmadıysa null.</param>
-public sealed record PassengerBagView(string BagTag, string FlightId, string State, EtaView? Eta, string? Carousel);
+/// <param name="Notice">
+/// Yolcuya gösterilecek bildirim (W4): NOT_LOADED ya da MISSING_AT_ARRIVAL (açık uyarı; bu durumda ETA verilmez)
+/// veya ARRIVAL_DELAYED (indirme beklenenden geç başladı). Yoksa null.
+/// </param>
+public sealed record PassengerBagView(string BagTag, string FlightId, string State, EtaView? Eta, string? Carousel, string? Notice);
 
 /// <param name="AsOfUtc">
 /// ETA'ların göreli hesaplandığı an: operasyon saati (IOperationalClock). Simülasyonda son olay zamanı, gerçek kurulumda gerçek saat.
@@ -26,9 +31,14 @@ public sealed class PassengerQueries(
 {
     private readonly IOperationalClock _now = operationalClock ?? new EventDerivedClock(db);
 
-    private record Row(string Tag, string Flight, string State, DateTimeOffset? LastEvent, string? Carousel);
+    private record Row(string Tag, string Flight, string State, DateTimeOffset? LastEvent, string? Carousel,
+        string? OpenAlert, DateTimeOffset? OnBlock, int FirstBagTargetSec, bool AnyBagUnloaded);
 
-    /// <summary>PNR ve soyada ait bavulları döndürür; kayıt yoksa ya da soyad yanlışsa aynı şekilde null.</summary>
+    /// <summary>
+    /// PNR ve soyada ait bavulları döndürür; kayıt yoksa ya da soyad yanlışsa aynı şekilde null.
+    /// Havayolları PNR'ları zamanla yeniden kullanır: aynı PNR ve soyad birden çok seyahatle eşleşirse yalnızca en son
+    /// uçuş tarihindeki bavullar döner. Böylece PNR'ı bilen biri eski bir seyahatin bavullarını göremez (veri en aza indirme).
+    /// </summary>
     public async Task<LookupResult?> LookupAsync(string pnr, string surname, CancellationToken ct = default)
     {
         var key = hasher.Compute(pnr, surname);
@@ -39,11 +49,21 @@ public sealed class PassengerQueries(
             SELECT b.bag_tag_number, b.flight_id, b.current_state,
                    (SELECT max(e.occurred_at_utc) FROM baggage_events e
                      WHERE e.bag_id = b.bag_id AND e.to_state = b.current_state AND e.outcome <> 'IGNORED_STALE'),
-                   fc.carousel
+                   fc.carousel,
+                   (SELECT a.kind FROM bag_alerts a WHERE a.bag_id = b.bag_id AND a.closed_at_utc IS NULL
+                     ORDER BY a.opened_at_utc DESC LIMIT 1),
+                   fc.on_block_utc,
+                   f.sla_first_bag_sec,
+                   EXISTS (SELECT 1 FROM bags o WHERE o.flight_id = b.flight_id
+                            AND o.current_state NOT IN ('CHECKED_IN', 'SECURITY_SCREENED', 'LOADED_ON_AIRCRAFT', 'OFFLOADED_NO_SHOW'))
             FROM passengers p
             JOIN bags b ON b.passenger_id = p.passenger_id
+            JOIN flights f ON f.flight_id = b.flight_id
             LEFT JOIN flight_context fc ON fc.flight_id = b.flight_id
             WHERE p.lookup_key = @k
+              AND f.flight_date = (SELECT max(f2.flight_date) FROM passengers p2
+                                   JOIN flights f2 ON f2.flight_id = p2.flight_id
+                                   WHERE p2.lookup_key = @k)
             ORDER BY b.bag_tag_number
             """))
         {
@@ -54,7 +74,11 @@ public sealed class PassengerQueries(
                 rows.Add(new Row(
                     r.GetString(0).Trim(), r.GetString(1), r.GetString(2),
                     r.IsDBNull(3) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(3),
-                    r.IsDBNull(4) ? null : r.GetString(4)));
+                    r.IsDBNull(4) ? null : r.GetString(4),
+                    r.IsDBNull(5) ? null : r.GetString(5),
+                    r.IsDBNull(6) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(6),
+                    r.GetInt32(7),
+                    r.GetBoolean(8)));
             }
         }
 
@@ -122,7 +146,19 @@ public sealed class PassengerQueries(
 
                 window ??= EtaEstimator.Estimate(state, last, unloadToCarousel, chuteToCarousel);
             }
-            return new PassengerBagView(row.Tag, row.Flight, row.State, window is null ? null : ToView(window, asOf), row.Carousel);
+            // Açık uyarı varsa ETA gösterilmez: "bantta görünecek" demek yanıltıcı olur. Uyarı işçisi birkaç saniyede bir
+            // çalıştığı için bavul bu arada okunduysa eski uyarı gösterilmez (StillApplies).
+            string? notice = null;
+            if (row.OpenAlert is { } alert && BagAlertRules.StillApplies(alert, state))
+            {
+                notice = alert;
+                window = null;
+            }
+            else if (BagAlertRules.IsArrivalDelayed(state, row.OnBlock, row.AnyBagUnloaded, row.FirstBagTargetSec, asOf))
+            {
+                notice = BagNotice.ArrivalDelayed;
+            }
+            return new PassengerBagView(row.Tag, row.Flight, row.State, window is null ? null : ToView(window, asOf), row.Carousel, notice);
         }).ToList();
 
         return new LookupResult(asOf, bags);

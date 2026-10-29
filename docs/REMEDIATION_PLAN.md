@@ -125,6 +125,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 
 #### W12. Temizlik ve belge sadeleştirme (B12)
 - Ortak veritabanı yardımcıları tek yerde. `IMPLEMENTATION_STATUS.md` ikiye bölünür: kısa ve güncel bir durum belgesi ile ayrı bir değişiklik günlüğü (`CHANGELOG.md`).
+- **Yolcu jetonunun kapsamı (W4 canlı denemesinden, 29 Ekim):** jeton bavulu yalnızca etiket numarasıyla tanır; etiketler zamanla yeniden kullanılır. Jeton `etiket@uçuş` kapsamına alınır; `/v1/bags/{tag}` ve canlı kanal grupları da uçuşla birlikte çalışır.
 
 ## 4. Çalışma kuralları
 
@@ -139,8 +140,8 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 |---|---|
 | W1 Şema göçü | Tamam (PR birleştirildi) |
 | W2 Saat soyutlaması | Tamam (PR birleştirildi) |
-| W3 Bant numarası | Tamam, test bekliyor (branch `faz6/w3-carousel`) |
-| W4 Kayıp bavul tespiti | Başlamadı |
+| W3 Bant numarası | Tamam (PR birleştirildi) |
+| W4 Kayıp bavul tespiti | W4a+W4b (tespit, ekranlar) yazıldı, test bekliyor (branch `faz6/w4-missing-bags`); W4c (simülatör senaryoları, ölçüm) sırada |
 | W5 Okuma kapsamı profilleri | Başlamadı |
 | W6 ML sözleşme testi | Başlamadı |
 | W7 Yük testi | Başlamadı |

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, getFlights, getFlightSla, type FlightSla, type FlightSummary } from "../api";
+import { ApiError, getAlerts, getFlights, getFlightSla, type FlightSla, type FlightSummary, type OpenAlert } from "../api";
+import { AlertsPanel } from "../components/AlertsPanel";
 import { clearStaff, loadStaff, type StaffSession } from "../auth";
 import { StaffLogin } from "../components/StaffLogin";
 import { SecurityPanel } from "../components/SecurityPanel";
@@ -32,6 +33,7 @@ export function OpsPage() {
 function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession; onExpired: () => void; onLogout: () => void }) {
   const [flights, setFlights] = useState<FlightSummary[] | null>(null);
   const [sla, setSla] = useState<FlightSla[] | null>(null);
+  const [alerts, setAlerts] = useState<OpenAlert[] | null>(null);
   const [error, setError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
@@ -52,6 +54,11 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
           setSla(await getFlightSla(session.token, controller.signal));
         } catch {
           if (!controller.signal.aborted) setSla(null);
+        }
+        try {
+          setAlerts(await getAlerts(session.token, controller.signal));
+        } catch {
+          if (!controller.signal.aborted) setAlerts(null);
         }
         setError(false);
         setUpdatedAt(new Date());
@@ -83,7 +90,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
           </button>
         </p>
       </div>
-      <p className="mt-2 text-steel">Uçuş başına bagaj sayıları, ilk bagaj süresi ve sıra dışı olaylar. "Alındı" banttan alınan tüm bagajları sayar; çıkış sütunları bunların alt kümesidir. "Çıkış okunmadı" bir sonuç değil, inceleme gerektiren durumdur. "İncelemede": çıkışta bavul ile rezervasyon eşleşmedi.</p>
+      <p className="mt-2 text-steel">Uçuş başına bagaj sayıları, ilk bagaj süresi ve sıra dışı olaylar. "Alındı" banttan alınan tüm bagajları sayar; çıkış sütunları bunların alt kümesidir. "Çıkış okunmadı" bir sonuç değil, inceleme gerektiren durumdur. "İncelemede": çıkışta bavul ile rezervasyon eşleşmedi. "Eksik": açık kayıp bavul uyarısı (aşağıdaki listede).</p>
 
       {error && (
         <p role="alert" className="mt-4 border-l-4 border-alert bg-tag p-3 text-sm text-alert">
@@ -109,6 +116,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Çıkış okundu</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Çıkış okunmadı</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">İncelemede</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Eksik</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Sıra dışı</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">İlk bagaj (dk)</th>
               </tr>
@@ -126,6 +134,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
                   <td className="px-3 py-2 text-right">{f.exitRead}</td>
                   <td className={["px-3 py-2 text-right", f.exitOverdue > 0 ? "font-bold text-signal" : ""].join(" ")}>{f.exitOverdue}</td>
                   <td className={["px-3 py-2 text-right", f.exitReview > 0 ? "font-bold text-signal" : ""].join(" ")}>{f.exitReview}</td>
+                  <td className={["px-3 py-2 text-right", f.openAlerts > 0 ? "font-bold text-signal" : ""].join(" ")}>{f.openAlerts}</td>
                   <td className={["px-3 py-2 text-right", f.anomalies > 0 ? "font-bold text-signal" : ""].join(" ")}>{f.anomalies}</td>
                   <td className="px-3 py-2 text-right">{f.firstBagMinutes === null ? "–" : decimalMinutes(f.firstBagMinutes)}</td>
                 </tr>
@@ -135,6 +144,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
         </div>
       )}
       {session.role === "security" && <SecurityPanel token={session.token} onExpired={onExpired} />}
+      {alerts && <AlertsPanel rows={alerts} />}
       {sla && sla.length > 0 && <SlaPanel rows={sla} />}
       {updatedAt && (
         <p className="mt-3 text-xs text-steel">

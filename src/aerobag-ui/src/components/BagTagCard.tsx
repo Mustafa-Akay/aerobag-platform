@@ -1,11 +1,12 @@
 import type { PassengerBag } from "../api";
-import { showsCarousel, stateMessage } from "../states";
+import { hidesCarousel, NOTICE_TEXT, showsCarousel, stateMessage } from "../states";
 import { Stepper } from "./Stepper";
 import { EtaBand } from "./EtaBand";
 
 export function BagTagCard({ bag }: { bag: PassengerBag }) {
   const waiting = bag.eta !== null;
-  const carousel = bag.carousel && showsCarousel(bag.state) ? bag.carousel : null;
+  const carousel = bag.carousel && showsCarousel(bag.state) && !hidesCarousel(bag.notice) ? bag.carousel : null;
+  const notice = bag.notice ? NOTICE_TEXT[bag.notice] : null;
   return (
     <article className="relative bg-tag p-5 shadow-[6px_6px_0_0_var(--color-ink)] outline outline-2 outline-ink sm:p-7">
       <div className="absolute left-1/2 top-3 h-4 w-4 -translate-x-1/2 rounded-full bg-concrete outline outline-2 outline-ink" aria-hidden="true" />
@@ -28,6 +29,13 @@ export function BagTagCard({ bag }: { bag: PassengerBag }) {
       </header>
 
       <p className="mt-5 text-lg font-semibold">{stateMessage(bag.state, carousel)}</p>
+
+      {notice && (
+        <div role="status" className="mt-4 border-l-4 border-signal bg-concrete p-3">
+          <p className="font-semibold">{notice.title}</p>
+          <p className="mt-1 text-sm">{notice.body}</p>
+        </div>
+      )}
 
       <div className="mt-5">
         <Stepper state={bag.state} />

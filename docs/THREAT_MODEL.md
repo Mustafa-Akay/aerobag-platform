@@ -47,11 +47,13 @@ Açık kalanlar:
 | Aktarım sırasında mesaj gövdesini değiştirmek | Gövde özeti imzanın parçası | `IngestSignatureTests.Body_changed_after_signing_is_rejected` |
 | Eski bir isteği tekrar oynatmak | ±5 dk zaman penceresi ve nonce önbelleği; ayrıca olaylar idempotent | `IngestSignatureTests` (zaman penceresi, tekrar oynatma, yeni nonce ile kopya) |
 | Bavulun durumunu geri almak | Durum makinesi monotondur; geride kalan olay durumu değiştirmez | `BagStateMachineTests`, `BaggageEventProcessorTests` |
+| Bilinen açığı olan bir bağımlılık (tedarik zinciri) | CI her itmede NuGet (dolaylı bağımlılıklar dahil), npm (çalışma zamanı, yüksek ve kritik) ve pip paketlerini bilinen açıklara karşı denetler; açık varsa iş kırmızıya döner. 29 Ekim 2026: SignalR (CVE-2026-70159) ve SSH.NET açıkları güncellemeyle kapatıldı | CI: "NuGet/npm/pip güvenlik denetimi" adımları |
 
 Açık kalanlar:
 - Süper kullanıcı tetikleyiciyi kapatabilir; veritabanı yöneticisine karşı olay zinciri özeti (hash chain) ya da harici değiştirilemez kayıt yok.
 - Nonce önbelleği bellektedir, tek örnek varsayar ve yeniden başlatmada sıfırlanır.
 - Yerel kurulumda TLS yok; ağ üzerinde jeton ve gövde açık gider.
+- Bağımlılık denetimi yalnızca bilinen açıkları yakalar; sürümler kilitlenmediği için (`>=`) ML bağımlılıkları kurulumdan kuruluma değişebilir. npm denetimi geliştirme araçlarını kapsamaz.
 
 ### Repudiation (inkâr)
 

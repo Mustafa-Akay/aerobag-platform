@@ -15,6 +15,12 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet build --configuration Release
       - run: dotnet test --configuration Release --no-build
+      # Bilinen güvenlik açığı olan NuGet paketi (dolaylı bağımlılıklar dahil) varsa iş kırmızıya döner.
+      - name: NuGet güvenlik denetimi
+        run: |
+          dotnet list package --vulnerable --include-transitive --format json > vulnerable.json
+          cat vulnerable.json
+          jq -e '[.projects[].frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?)] | length == 0' vulnerable.json
 
   ui:
     runs-on: ubuntu-latest
@@ -30,6 +36,9 @@ jobs:
           cache-dependency-path: src/aerobag-ui/package-lock.json
       - run: npm ci
       - run: npm run build
+      # Tarayıcıya giden (çalışma zamanı) paketlerde yüksek ya da kritik açık varsa iş kırmızıya döner.
+      - name: npm güvenlik denetimi
+        run: npm audit --omit=dev --audit-level=high
 
   ml:
     runs-on: ubuntu-latest
@@ -45,3 +54,7 @@ jobs:
           cache-dependency-path: ml/requirements.txt
       - run: pip install -r requirements.txt
       - run: python -m pytest -q tests
+      - name: pip güvenlik denetimi
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --progress-spinner off

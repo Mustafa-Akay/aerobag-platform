@@ -7,7 +7,7 @@ namespace AeroBag.IntegrationTests;
 /// <summary>Gerçek bir PostgreSQL konteyneri başlatır ve şemayı göç aracıyla (db/migrations) kurar. Docker gerekir.</summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder().WithImage("postgres:16-alpine").Build();
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
 
     public NpgsqlDataSource Db { get; private set; } = null!;
 

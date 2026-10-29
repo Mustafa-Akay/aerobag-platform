@@ -44,6 +44,13 @@ public static class LiveSender
                 }
             }
 
+            if (m.Kind == "MILESTONE")
+            {
+                // AODB beslemesi güvenilir kabul edilir: iletim gürültüsü yalnızca bavul okumalarına uygulanır.
+                await PostJsonAsync(http, "/v1/flights/milestones", m.Text, "MILESTONE", creds, Inc, ct);
+                continue;
+            }
+
             if (m.Gate is not null)
             {
                 // Kapı paketlerine iletim gürültüsü uygulanmaz; sensör hataları GateModel'de ayrıca modellenir.
@@ -102,6 +109,20 @@ public static class LiveSender
                 var truth = gate.Truth.TryGetValue(tag, out var t) ? t : "?";
                 inc($"GATE {truth} -> {r.GetProperty("decision").GetString()}");
             }
+        }
+        catch (HttpRequestException)
+        {
+            inc("CONNECTION_ERROR");
+        }
+    }
+
+    private static async Task PostJsonAsync(HttpClient http, string path, string json, string label, SourceCredentials creds, Action<string> inc, CancellationToken ct)
+    {
+        try
+        {
+            using var request = creds.SignedPost(path, Encoding.UTF8.GetBytes(json), "application/json; charset=utf-8");
+            using var response = await http.SendAsync(request, ct);
+            inc(response.IsSuccessStatusCode ? $"{label} ACCEPTED" : $"{label} HTTP_{(int)response.StatusCode}");
         }
         catch (HttpRequestException)
         {

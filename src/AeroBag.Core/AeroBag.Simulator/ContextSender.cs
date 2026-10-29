@@ -34,18 +34,6 @@ public static class ContextSender
                 using var req = creds.SignedPost("/v1/flights/context", json, "application/json; charset=utf-8");
                 using var resp = await http.SendAsync(req, ct);
                 if (resp.IsSuccessStatusCode) ok++;
-
-                // Kilometre taşları (W4). Gerçek AODB bunları olay anında gönderir; simülatör şimdilik baştan gönderiyor.
-                // Kural yalnızca zamanı geçince uyarı açtığı için sonuç aynıdır (operasyon saati olaylardan ilerler).
-                if (f.DepartedUtc is not null || f.UnloadingCompletedUtc is not null)
-                {
-                    var ms = JsonSerializer.SerializeToUtf8Bytes(new
-                    {
-                        flightId = f.FlightId, departedUtc = f.DepartedUtc, unloadingCompletedUtc = f.UnloadingCompletedUtc,
-                    }, Json);
-                    using var mreq = creds.SignedPost("/v1/flights/milestones", ms, "application/json; charset=utf-8");
-                    using var mresp = await http.SendAsync(mreq, ct);
-                }
             }
             catch (HttpRequestException)
             {
@@ -53,5 +41,21 @@ public static class ContextSender
             }
         }
         return ok;
+    }
+
+    /// <summary>
+    /// AODB kilometre taşları (W4): kalkış ve varışta "indirme bitti". Gerçek AODB bunları olay anında gönderir; bu yüzden
+    /// bavul mesajlarıyla aynı zaman çizelgesine konur (<see cref="LiveSender"/>, tür MILESTONE).
+    /// </summary>
+    public static IEnumerable<ScheduledMessage> Milestones(FlightInfo f)
+    {
+        if (f.DepartedUtc is { } d)
+        {
+            yield return new ScheduledMessage(d, JsonSerializer.Serialize(new { flightId = f.FlightId, departedUtc = d }, Json), "", "MILESTONE");
+        }
+        if (f.UnloadingCompletedUtc is { } u)
+        {
+            yield return new ScheduledMessage(u, JsonSerializer.Serialize(new { flightId = f.FlightId, unloadingCompletedUtc = u }, Json), "", "MILESTONE");
+        }
     }
 }

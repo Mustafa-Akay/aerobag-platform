@@ -78,6 +78,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 - **Simülatör:** yüklenmeyen (%0,5) ve varışta bulunmayan (%0,3) bavul senaryoları, demo varsayımı. ABD Ulaştırma Bakanlığı'nın yayımladığı yanlış işlenen bavul oranı mertebe karşılaştırması için kaynak olarak eklenir.
 - **Ölçüm:** tespit oranı, yanlış uyarı oranı ve tespit gecikmesi (bavul gerçekte kaçtıktan kaç dakika sonra yolcuya söylendi).
 - **Bitti ölçütü:** yüklenmeyen bavulun yolcusu, uçak inmeden önce uyarı görür. Varışta bulunmayan bavulun yolcusu bant boşalmadan uyarı görür.
+- **Ölçütte değişiklik (W4c ölçümünden, 29 Ekim):** kalkıştaki NOT_LOADED uyarılarının ~5'te 4'ü kaçırılan yükleme okumasından doğan yanlış uyarıydı ve varışa kadar (~3,5 saat) açık kalıyordu. Karar: NOT_LOADED'ı **personel** kalkıştan sonra görür (bavulu sonraki uçağa yönlendirmek onların elindedir); **yolcu** her iki uyarıyı da varışta, bant boşalmadan görür. Yeni ölçüt: gerçek vakaların büyük çoğunluğunda yolcu bant boşalmadan haberdar olur ve yolcuya giden yanlış uyarı, personel ekranındakinin küçük bir kesridir (EVALUATION.md).
 - **Testler:** kural birim testleri (sınır süreler, sonradan bulunan bavul), işçi entegrasyon testleri, yolcu yanıtı, simülatör senaryoları.
 - **Kapsam dışı (belgelenir):** WorldTracer ya da kayıp bavul raporu (PIR) entegrasyonu, kurye ve teslimat süreci.
 - **W3 canlı denemesinden not (28 Ekim):** ZZ0102'de bavullar on-block'tan 30 dakikadan uzun süre sonra hâlâ uçaktaydı. Uçuş düzeyi ML penceresi geçtiği için kasıtlı olarak gizlendi ve yolcu hiçbir tahmin görmedi. Bu "beklenenden geç" durumu da yolcuya söylenmeli (ör. "Bavullar beklenenden geç indiriliyor"), operasyon panosunda gecikme olarak görünmeli. Kayıp bavul uyarısına giden ilk aşama budur.
@@ -141,7 +142,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W1 Şema göçü | Tamam (PR birleştirildi) |
 | W2 Saat soyutlaması | Tamam (PR birleştirildi) |
 | W3 Bant numarası | Tamam (PR birleştirildi) |
-| W4 Kayıp bavul tespiti | W4a+W4b (tespit, ekranlar) yazıldı, test bekliyor (branch `faz6/w4-missing-bags`); W4c (simülatör senaryoları, ölçüm) sırada |
+| W4 Kayıp bavul tespiti | W4a+W4b birleştirildi; W4c (senaryolar, ölçüm, ölçüme göre düzeltme) test bekliyor (branch `faz6/w4c-alert-eval`) |
 | W5 Okuma kapsamı profilleri | Başlamadı |
 | W6 ML sözleşme testi | Başlamadı |
 | W7 Yük testi | Başlamadı |

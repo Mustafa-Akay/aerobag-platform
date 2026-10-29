@@ -34,11 +34,13 @@ public static class BagNotice
 
 /// <summary>
 /// Tolerans süreleri: kilometre taşından sonra uyarı açılmadan önce beklenen süre. Okuma mesajları geç ya da
-/// sırasız gelebildiği için sıfır olamaz. Varsayılanlar DEMO varsayımıdır (ölçüm değildir); W4 ölçümüyle gözden geçirilir.
+/// sırasız gelebildiği için sıfır olamaz. Varsayılanlar simülasyon ölçümüyle seçildi (docs/EVALUATION.md, "Kayıp bavul uyarısı"):
+/// varışta 5 dk, bavulların ~%90'ını bant boşalmadan yakalarken okuma kaybından doğan yanlış uyarıyı düşük tutar
+/// (10 dk'da bant boşalmadan yakalama ~%10'a düşer). Saha verisiyle yeniden seçilmelidir.
 /// </summary>
 public sealed record AlertPolicy(TimeSpan NotLoadedGrace, TimeSpan MissingGrace)
 {
-    public static readonly AlertPolicy Default = new(TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
+    public static readonly AlertPolicy Default = new(TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(5));
 }
 
 /// <summary>AODB kilometre taşları. Alanlardan en az biri verilir; verilmeyen alan kayıtlı değeri korur.</summary>
@@ -106,6 +108,18 @@ public static class BagAlertRules
             BagAlertKind.MissingAtArrival => !PastArrival(state),
             _ => false,
         };
+
+    /// <summary>
+    /// Açık uyarı yolcuya gösterilir mi. MISSING_AT_ARRIVAL her zaman gösterilir. NOT_LOADED ise yalnızca varışta
+    /// "indirme bitti" toleransı geçtikten sonra gösterilir: ölçümde kalkıştaki NOT_LOADED uyarılarının ~5'te 4'ü kaçırılan
+    /// yükleme okumasından doğan yanlış uyarıydı ve varışa kadar (~3,5 saat) açık kalıyordu. Bu uyarıyı personel kalkıştan
+    /// sonra görür (bavulu sonraki uçağa yönlendirmek onların elindedir); yolcu, kanıt güçlendiğinde, bant boşalmadan öğrenir.
+    /// </summary>
+    public static bool VisibleToPassenger(string kind, BagState state, DateTimeOffset? unloadingCompletedUtc,
+        DateTimeOffset now, AlertPolicy policy) =>
+        StillApplies(kind, state)
+        && (kind != BagAlertKind.NotLoaded
+            || (unloadingCompletedUtc is { } u && now >= u + policy.MissingGrace));
 
     /// <summary>
     /// Uçuşta bavul indirme beklenenden geç başladı mı: on-block'tan sonra ilk bavul hedefi geçti ve uçuştan henüz

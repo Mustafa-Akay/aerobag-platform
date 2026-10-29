@@ -27,12 +27,14 @@ public sealed record LookupResult(DateTimeOffset AsOfUtc, IReadOnlyList<Passenge
 
 public sealed class PassengerQueries(
     NpgsqlDataSource db, LookupKeyHasher hasher, EtaStatistics stats, TimeProvider clock,
-    IMlPredictor? ml = null, FlightContextStore? contexts = null, IOperationalClock? operationalClock = null)
+    IMlPredictor? ml = null, FlightContextStore? contexts = null, IOperationalClock? operationalClock = null,
+    AlertPolicy? alertPolicy = null)
 {
     private readonly IOperationalClock _now = operationalClock ?? new EventDerivedClock(db);
+    private readonly AlertPolicy _policy = alertPolicy ?? AlertPolicy.Default;
 
     private record Row(string Tag, string Flight, string State, DateTimeOffset? LastEvent, string? Carousel,
-        string? OpenAlert, DateTimeOffset? OnBlock, int FirstBagTargetSec, bool AnyBagUnloaded);
+        string? OpenAlert, DateTimeOffset? OnBlock, int FirstBagTargetSec, bool AnyBagUnloaded, DateTimeOffset? UnloadingCompleted);
 
     /// <summary>
     /// PNR ve soyada ait bavulları döndürür; kayıt yoksa ya da soyad yanlışsa aynı şekilde null.
@@ -55,11 +57,13 @@ public sealed class PassengerQueries(
                    fc.on_block_utc,
                    f.sla_first_bag_sec,
                    EXISTS (SELECT 1 FROM bags o WHERE o.flight_id = b.flight_id
-                            AND o.current_state NOT IN ('CHECKED_IN', 'SECURITY_SCREENED', 'LOADED_ON_AIRCRAFT', 'OFFLOADED_NO_SHOW'))
+                            AND o.current_state NOT IN ('CHECKED_IN', 'SECURITY_SCREENED', 'LOADED_ON_AIRCRAFT', 'OFFLOADED_NO_SHOW')),
+                   m.unloading_completed_utc
             FROM passengers p
             JOIN bags b ON b.passenger_id = p.passenger_id
             JOIN flights f ON f.flight_id = b.flight_id
             LEFT JOIN flight_context fc ON fc.flight_id = b.flight_id
+            LEFT JOIN flight_milestones m ON m.flight_id = b.flight_id
             WHERE p.lookup_key = @k
               AND f.flight_date = (SELECT max(f2.flight_date) FROM passengers p2
                                    JOIN flights f2 ON f2.flight_id = p2.flight_id
@@ -78,7 +82,8 @@ public sealed class PassengerQueries(
                     r.IsDBNull(5) ? null : r.GetString(5),
                     r.IsDBNull(6) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(6),
                     r.GetInt32(7),
-                    r.GetBoolean(8)));
+                    r.GetBoolean(8),
+                    r.IsDBNull(9) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(9)));
             }
         }
 
@@ -147,9 +152,10 @@ public sealed class PassengerQueries(
                 window ??= EtaEstimator.Estimate(state, last, unloadToCarousel, chuteToCarousel);
             }
             // Açık uyarı varsa ETA gösterilmez: "bantta görünecek" demek yanıltıcı olur. Uyarı işçisi birkaç saniyede bir
-            // çalıştığı için bavul bu arada okunduysa eski uyarı gösterilmez (StillApplies).
+            // çalıştığı için bavul bu arada okunduysa eski uyarı gösterilmez. NOT_LOADED yolcuya ancak varışta gösterilir
+            // (VisibleToPassenger; personel kalkıştan sonra görür).
             string? notice = null;
-            if (row.OpenAlert is { } alert && BagAlertRules.StillApplies(alert, state))
+            if (row.OpenAlert is { } alert && BagAlertRules.VisibleToPassenger(alert, state, row.UnloadingCompleted, asOf, _policy))
             {
                 notice = alert;
                 window = null;

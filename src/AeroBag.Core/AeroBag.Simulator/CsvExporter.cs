@@ -26,7 +26,8 @@ public static class CsvExporter
         foreach (var f in flights)
         {
             var i = f.Info;
-            foreach (var b in f.Bags)
+            // W4 senaryosundaki (yüklenmeyen/varışta bulunmayan) bavulların bant zamanı gerçekleşmedi; veri setine girmez.
+            foreach (var b in f.Bags.Where(b => b.Fate is null))
             {
                 w.WriteLine(string.Join(',',
                     i.FlightId, b.BagTag, i.Regime, i.AircraftType, i.WideBody ? 1 : 0, i.Weather, i.TotalBags,

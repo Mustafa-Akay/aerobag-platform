@@ -242,3 +242,64 @@ Komut: `dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode gate-e
 - Sensör hata oranları ve gerçek vaka oranı varsayımdır; sonuçlar bu varsayımlarla birlikte okunmalıdır. Farklı varsayımlarla (örneğin daha az yan koridor karışması) tablo büyük ölçüde değişir.
 - Yan koridordan okunan bavulun durumu değerlendirmede yaklaşık olarak hesaplanır (kendi çıkışı daha önceyse kapanmış sayılır).
 - Personelin incelemede verdiği kararların doğruluğu modellenmedi.
+
+## Kayıp bavul uyarısı (W4, simülasyon)
+
+**Bu bölümdeki oranlar kuralın kendisini değil, varsayılan senaryo ve okuma kaybı oranlarına karşı davranışını gösterir.**
+- **Senaryo oranları** demo varsayımıdır: bavulların %0,3'ü uçağa yüklenmez, %0,2'si yüklenip varışta indirilmez.
+  - Toplam %0,5, kamuya açık oranlarla aynı mertebede. ABD Ulaştırma Bakanlığı 2024 için her 100 bavulda 0,55 yanlış işlenen bavul bildiriyor. SITA'nın 2025 raporuna göre 2024'te 1000 yolcuda 6,3 bavul yanlış işlendi ve bunların %16'sı yükleme hatasından kaynaklandı.
+  - Simülatörde aktarma bavulu yok. Gerçekte yanlış işlenen bavulların en büyük kaynağı aktarmadır (SITA'ya göre %41).
+- **Okuma kaybı** canlı göndericiyle aynıdır: mesajların %1'i düşer, %0,5'i bozulur.
+
+Komut: `dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode alert-eval`
+- 200 uçuş, 27.449 bavul, tohum 42.
+- 91 yüklenmeyen, 51 varışta bulunmayan bavul.
+- Kural API'deki kuralın aynısıdır (`BagAlertRules`).
+- Kalkış toleransı 10 dk; denenen, varış ("indirme bitti") toleransıdır.
+
+### Personel ekranı (uyarının açıldığı an)
+
+| Koşul | Varış toleransı | Yüklenmeyen: inişten önce yakalanan | Varışta yok: yakalanan | Bant boşalmadan yakalanan | Yanlış uyarı (1000 bavulda) | Yanlış NOT_LOADED / MISSING | Yanlış uyarının açık kaldığı süre, medyan / p90 |
+|---|---|---|---|---|---|---|---|
+| Okuma kaybı yok | 5 dk | 91/91 | 51/51 | 46/51 (%90) | 0 | 0 / 0 | – |
+| Kayıplı | 2 dk | 91/91 | 51/51 | 51/51 (%100) | 20,1 | 379 / 172 | 207 / 221 dk |
+| **Kayıplı (varsayılan)** | **5 dk** | 91/91 | 51/51 | 46/51 (%90) | 15,5 | 379 / 47 | 211 / 224 dk |
+| Kayıplı | 10 dk | 91/91 | 51/51 | 5/51 (%10) | 13,9 | 379 / 2 | 213 / 224 dk |
+| Kayıplı | 15 dk | 91/91 | 51/51 | 1/51 (%2) | 13,8 | 379 / 0 | 213 / 224 dk |
+| Kayıplı | 20 dk | 91/91 | 51/51 | 1/51 (%2) | 13,8 | 379 / 0 | 213 / 224 dk |
+
+Tespit gecikmesi her satırda tam tolerans süresidir: kalkıştan 10 dk, indirme bittiden varış toleransı kadar.
+
+### Yolcu ekranı (NOT_LOADED yalnızca "indirme bitti + varış toleransı"ndan sonra görünür)
+
+| Koşul | Varış toleransı | Gerçek vaka: yolcu bant boşalmadan öğrendi | Yanlış uyarı gören yolcu (1000 bavulda) | Yanlış uyarının yolcuya göründüğü süre, medyan / p90 |
+|---|---|---|---|---|
+| Okuma kaybı yok | 5 dk | 126/142 (%89) | 0 | – |
+| Kayıplı | 2 dk | 142/142 (%100) | 6,4 | 1,9 / 5,1 dk |
+| **Kayıplı (varsayılan)** | **5 dk** | 126/142 (%89) | **1,8** | 1,3 / 4,1 dk |
+| Kayıplı | 10 dk | 20/142 (%14) | 0,1 | 2,9 / 3,4 dk |
+| Kayıplı | 15 dk | 2/142 (%1) | 0 | – |
+| Kayıplı | 20 dk | 0/142 (%0) | 0 | – |
+
+### Okuma
+1. **İlk tasarım yolcuya çoğunlukla yanlış uyarı gösteriyordu.** Kalkışta açılan NOT_LOADED uyarılarının 379'u yanlış, 91'i gerçekti; yani yaklaşık 5'te 4'ü yanlıştı. Bunlar yükleme okuması kaybolan bavullardı. Bir sonraki okuma ancak varışta geldiği için yanlış uyarı ortalama 3,5 saat açık kalıyordu. Tolerans bunu değiştirmez; 379 her satırda aynıdır. Sebep ExitGuard'daki taban oran etkisinin aynısı: gerçek vaka nadir olduğundan küçük bir okuma kaybı bile uyarılara hâkim oluyor.
+2. **Karar: önce personel, sonra yolcu.**
+   - Personel NOT_LOADED'ı kalkıştan sonra görür. Bavulu sonraki uçağa yönlendirmek onun elindedir ve yanlış uyarının bedeli bir kontroldür.
+   - Yolcu uyarıyı ancak varışta, indirme bittikten sonra hâlâ okuma yoksa görür. Kaybolan yükleme okumasının yanlış uyarısı çoğunlukla indirme okumasıyla, yolcu görmeden kapanır.
+   - Sonuç: yolcuya giden yanlış uyarı 1000 bavulda 15,5'ten 1,8'e düşer (yaklaşık 8,5 kat). Görünür kaldığı süre 3,5 saatten 1,3 dakikaya iner (medyan). Yolcunun gördüğü uyarıların yaklaşık 4'te 3'ü gerçektir (142 gerçek, ~49 yanlış).
+   - Bedeli: yüklenmeyen bavulun yolcusu bunu inişten önce değil, varışta bant boşalmadan öğrenir. Uçuş sırasında yolcunun yapabileceği bir şey olmadığı için bu kabul edildi.
+3. **Varış toleransı bir takastır ve 5 dk seçildi.**
+   - Varışta "bant boşalmadan" yakalamak için tolerans, indirmenin bitişinden son bavulun banda varmasına kadar geçen taşıma süresinden kısa olmalıdır (simülatörde 1-12 dk).
+   - 10 dk'da gerçek vakaların yalnızca %10'u bant boşalmadan yakalanır; 2 dk'da hepsi yakalanır ama kaybolan indirme okumasından doğan yanlış MISSING uyarıları artar (172).
+   - 5 dk'da bant boşalmadan yakalama %90 (yolcu tarafında %89), yolcuya giden yanlış uyarı 1000 bavulda 1,8.
+4. **Yanlış uyarılar kendiliğinden kapanıyor.** Ölçüm sonunda açık kalan yanlış uyarı yok: kaybolan her okumanın ardından bavulun bir sonraki okuması uyarıyı kapatıyor. Okuma kapsamını artırmak (W5) yanlış uyarının kaynağını azaltır.
+
+### Sınırlar
+- Senaryo ve okuma kaybı oranları varsayımdır. Okuma kaybının bavuldan bağımsız olduğu varsayıldı; gerçekte bozuk bir okuyucu aynı noktada art arda kaçırır (W5).
+- Uyarı işçisinin gecikmesi (≤5 sn) ve yolcu sayfasının yenilenme süresi (canlı bağlantıda en geç 20 sn) sıfır kabul edildi.
+- "Bant boşaldı" anı uçuşun son bavulunun banda geldiği andır. Yolcunun bant başında gerçekte ne kadar beklediği modellenmedi.
+- Aktarma bavulu, yanlış uçağa yükleme ve WorldTracer süreci modellenmedi.
+
+### Kaynaklar
+- ABD Ulaştırma Bakanlığı, *Air Travel Consumer Report: December 2024, Full Year 2024 Numbers*: https://www.transportation.gov/briefing-room/air-travel-consumer-report-december-2024-full-year-2024-numbers
+- SITA, *Baggage IT Insights 2025* (basın bülteni): https://www.sita.aero/pressroom/news-releases/more-air-passengers-than-ever-with-one-of-the-lowest-rates-of-mishandled-baggage-thanks-to-tech-investments/

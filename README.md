@@ -105,6 +105,7 @@ cd ml; python -m pytest -q tests         # Python 3.12, ml/requirements.txt
 | `src/AeroBag.Core/AeroBag.Simulator` | Tohumlu bavul akışı ve kapı sensörü modeli, ExitGuard değerlendirmesi |
 | `src/aerobag-ui` | Yolcu sayfası, operasyon panosu, güvenlik ekranı |
 | `ml` | Veri, modeller, değerlendirme ve FastAPI tahmin servisi |
+| `contracts/ml` | API ile ML servisi arasındaki istek/yanıt sözleşmesi (iki taraf da buna karşı test edilir) |
 | `tests` | Birim ve entegrasyon testleri |
 | `db/migrations` | Sırayla uygulanan şema göçleri (şema, uygulama rolü, yetkiler) |
 | `src/AeroBag.Core/AeroBag.Migrator` | Göç aracı (tablo sahibi hesabıyla çalışır) |

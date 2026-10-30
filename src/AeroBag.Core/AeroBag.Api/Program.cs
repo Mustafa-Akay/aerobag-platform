@@ -86,15 +86,25 @@ builder.Services.AddSingleton<SecurityReviews>();
 
 // ML tahmin servisi (Faz 2). Ml:BaseUrl boşsa kapalıdır; servis erişilemezse sistem taban çizgisine düşer.
 var mlUrl = builder.Configuration["Ml:BaseUrl"] ?? "http://localhost:8000";
+// W6: ML hataları MlStatus'a yazılır ve loglanır; zaman aşımı yapılandırılabilir (Ml:TimeoutSeconds, varsayılan 2).
+var mlTimeout = builder.Configuration.GetValue("Ml:TimeoutSeconds", 2.0);
+if (mlTimeout is <= 0 or > 60)
+{
+    throw new InvalidOperationException("Ml:TimeoutSeconds 0 ile 60 arasında olmalı.");
+}
 if (string.IsNullOrWhiteSpace(mlUrl))
 {
     builder.Services.AddSingleton<IMlPredictor, NullMlPredictor>();
+    builder.Services.AddSingleton(new MlStatus(enabled: false));
 }
 else
 {
+    builder.Services.AddSingleton(new MlStatus(enabled: true));
     builder.Services.AddSingleton<IMlPredictor>(sp => new MlHttpPredictor(
-        new HttpClient { BaseAddress = new Uri(mlUrl), Timeout = TimeSpan.FromSeconds(2) },
-        sp.GetRequiredService<TimeProvider>()));
+        new HttpClient { BaseAddress = new Uri(mlUrl), Timeout = TimeSpan.FromSeconds(mlTimeout) },
+        sp.GetRequiredService<TimeProvider>(),
+        sp.GetRequiredService<MlStatus>(),
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("AeroBag.Ml")));
 }
 builder.Services.AddHostedService<MlOutcomeBackgroundService>();
 builder.Services.AddSingleton<ExitDeadlineService>();
@@ -343,6 +353,10 @@ app.MapPost("/v1/flights/milestones", async (FlightMilestones body, FlightMilest
     }
     return Results.Accepted();
 }).WithMetadata(new RequireSourceScope(IngestScopes.Context));
+
+// ML servisinin durumu (W6): erişilebilir mi, son hata ne zaman ve neden. Operasyon panosu gösterir.
+app.MapGet("/v1/ml/status", (MlStatus status, TimeProvider clock) => Results.Ok(status.Snapshot(clock.GetUtcNow())))
+    .RequireAuthorization(Roles.StaffPolicy);
 
 // Açık kayıp bavul uyarıları (operasyon panosu).
 app.MapGet("/v1/alerts", async (BagAlertQueries alerts, CancellationToken ct) => Results.Ok(await alerts.OpenAsync(200, ct)))

@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "features": {
+        "wide": 0,
+        "rain": 1,
+        "bags": 120,
+        "stand_m": 1000.0,
+        "chute_m": 50.0,
+        "speed": 0.55,
+        "arrivals_30": 2,
+        "handler": "HANDLER_B"
+      },
+      "duration_s": 305.0
+    }
+  ]
+}

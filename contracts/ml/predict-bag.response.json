@@ -1,0 +1,6 @@
+{
+  "basis": "ML",
+  "adapted": true,
+  "adaptation_samples": 140,
+  "seconds_after_unload": { "p10": 212.5, "p50": 318.0, "p90": 541.2 }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, getAlerts, getFlights, getFlightSla, type FlightSla, type FlightSummary, type OpenAlert } from "../api";
+import { ApiError, getAlerts, getFlights, getFlightSla, getMlStatus, type FlightSla, type FlightSummary, type MlStatus, type OpenAlert } from "../api";
 import { AlertsPanel } from "../components/AlertsPanel";
 import { clearStaff, loadStaff, type StaffSession } from "../auth";
 import { StaffLogin } from "../components/StaffLogin";
@@ -12,6 +12,23 @@ const POLL_FAST_MS = 3000;
 const POLL_SLOW_MS = 20000;
 
 const ROLE_TEXT: Record<StaffSession["role"], string> = { ops: "Operasyon", security: "Güvenlik" };
+
+/** ML servisi erişilemezse tahminler sessizce geçmiş verilere düşer; bu satır nedenini görünür kılar (W6). */
+function MlStatusLine({ status }: { status: MlStatus }) {
+  if (!status.enabled) {
+    return <p className="mt-3 text-sm text-steel">ML servisi yapılandırmada kapalı; tahminler geçmiş verilere dayanıyor.</p>;
+  }
+  if (status.healthy) {
+    return <p className="mt-3 text-sm text-steel">ML servisi yanıt veriyor.</p>;
+  }
+  const when = status.lastFailureUtc ? clockTime(new Date(status.lastFailureUtc)) : "–";
+  return (
+    <p role="status" className="mt-3 border-l-4 border-signal bg-tag p-3 text-sm">
+      <strong>ML servisi yanıt vermiyor</strong> ({status.lastFailureReason ?? "bilinmeyen neden"}, son hata {when}). Tahminler geçmiş
+      verilere ya da varsayılan aralığa dayanıyor.
+    </p>
+  );
+}
 
 export function OpsPage() {
   const [session, setSession] = useState<StaffSession | null>(() => loadStaff());
@@ -34,6 +51,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
   const [flights, setFlights] = useState<FlightSummary[] | null>(null);
   const [sla, setSla] = useState<FlightSla[] | null>(null);
   const [alerts, setAlerts] = useState<OpenAlert[] | null>(null);
+  const [ml, setMl] = useState<MlStatus | null>(null);
   const [error, setError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
@@ -59,6 +77,11 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
           setAlerts(await getAlerts(session.token, controller.signal));
         } catch {
           if (!controller.signal.aborted) setAlerts(null);
+        }
+        try {
+          setMl(await getMlStatus(session.token, controller.signal));
+        } catch {
+          if (!controller.signal.aborted) setMl(null);
         }
         setError(false);
         setUpdatedAt(new Date());
@@ -91,6 +114,8 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
         </p>
       </div>
       <p className="mt-2 text-steel">Uçuş başına bagaj sayıları, ilk bagaj süresi ve sıra dışı olaylar. "Alındı" banttan alınan tüm bagajları sayar; çıkış sütunları bunların alt kümesidir. "Çıkış okunmadı" bir sonuç değil, inceleme gerektiren durumdur. "İncelemede": çıkışta bavul ile rezervasyon eşleşmedi. "Eksik": açık kayıp bavul uyarısı (aşağıdaki listede).</p>
+
+      {ml && <MlStatusLine status={ml} />}
 
       {error && (
         <p role="alert" className="mt-4 border-l-4 border-alert bg-tag p-3 text-sm text-alert">

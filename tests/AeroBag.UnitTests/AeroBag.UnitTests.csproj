@@ -11,6 +11,10 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
+    <!-- ML servis sözleşmesi (W6): Python testleri de aynı dosyaları kullanır. -->
+    <None Include="..\..\contracts\ml\*.json" Link="contracts\ml\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\AeroBag.Core\AeroBag.Domain\AeroBag.Domain.csproj" />
     <ProjectReference Include="..\..\src\AeroBag.Core\AeroBag.Application\AeroBag.Application.csproj" />
     <ProjectReference Include="..\..\src\AeroBag.Core\AeroBag.Simulator\AeroBag.Simulator.csproj" />

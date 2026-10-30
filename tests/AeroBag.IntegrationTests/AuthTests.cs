@@ -22,11 +22,11 @@ public sealed class AuthTests(PostgresFixture fx) : IClassFixture<PostgresFixtur
 
     private static string NewPnr() => Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
-    private async Task<(string Pnr, string Tag)> CreateBagAsync(HttpClient client, string flightNo)
+    private async Task<(string Pnr, string Tag)> CreateBagAsync(HttpClient client, string flightNo, string? tag = null, string date = "22OCT")
     {
-        var tag = NewTag();
+        tag ??= NewTag();
         var pnr = NewPnr();
-        var bsm = $"BSM\n.V/1LAYT\n.F/{flightNo}/22OCT/AYT/Y\n.N/{tag}001\n.W/K/1/18\n.P/YILMAZ/AYSE\n.L/{pnr}\nENDBSM";
+        var bsm = $"BSM\n.V/1LAYT\n.F/{flightNo}/{date}/AYT/Y\n.N/{tag}001\n.W/K/1/18\n.P/YILMAZ/AYSE\n.L/{pnr}\nENDBSM";
         var resp = await client.SendAsync(TestApi.Signed("/v1/events", bsm));
         Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
         return (pnr, tag);
@@ -40,13 +40,18 @@ public sealed class AuthTests(PostgresFixture fx) : IClassFixture<PostgresFixtur
         return json.GetProperty("accessToken").GetString()!;
     }
 
-    private static async Task<string> PassengerTokenAsync(HttpClient client, string pnr)
+    private static async Task<string> PassengerTokenAsync(HttpClient client, string pnr) =>
+        (await PassengerLookupAsync(client, pnr)).Token;
+
+    /// <summary>Yolcu sorgusu: jeton ve sorgudaki ilk bavulun uçuşu.</summary>
+    private static async Task<(string Token, string FlightId)> PassengerLookupAsync(HttpClient client, string pnr)
     {
         var resp = await client.PostAsJsonAsync("/v1/lookup", new { pnr, surname = "YILMAZ" });
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var json = await resp.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(json.GetProperty("expiresInSec").GetInt32() > 0);
-        return json.GetProperty("accessToken").GetString()!;
+        var flightId = json.GetProperty("bags")[0].GetProperty("flightId").GetString()!;
+        return (json.GetProperty("accessToken").GetString()!, flightId);
     }
 
     private static HttpRequestMessage Get(string url, string? token)
@@ -128,6 +133,40 @@ public sealed class AuthTests(PostgresFixture fx) : IClassFixture<PostgresFixtur
     }
 
     [Fact]
+    public async Task Passenger_token_is_bound_to_the_flight_not_only_the_tag()
+    {
+        // Etiket numaraları yeniden kullanılır: aynı etiket önce 22 Ekim'de A yolcusunun, sonra 23 Ekim'de B yolcusunun bavulu.
+        var client = _factory.CreateClient();
+        var tag = NewTag();
+        var (pnrA, _) = await CreateBagAsync(client, "ZZ0404", tag, "22OCT");
+        var (pnrB, _) = await CreateBagAsync(client, "ZZ0404", tag, "23OCT");
+        var (tokenA, flightA) = await PassengerLookupAsync(client, pnrA);
+        var (_, flightB) = await PassengerLookupAsync(client, pnrB);
+        Assert.NotEqual(flightA, flightB);
+
+        // B'nin bavulu daha yeni olduğu hâlde A uçuşu belirtmeden kendi bavulunu görür, B'ninkini değil.
+        var own = await client.SendAsync(Get($"/v1/bags/{tag}", tokenA));
+        Assert.Equal(HttpStatusCode.OK, own.StatusCode);
+        Assert.Equal(flightA, (await own.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("flightId").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Get($"/v1/bags/{tag}?flight={flightA}", tokenA))).StatusCode);
+
+        // Uçuşu açıkça istese de B'nin bavulu A'ya kapalıdır; varlığı da sızdırılmaz.
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(Get($"/v1/bags/{tag}?flight={flightB}", tokenA))).StatusCode);
+
+        // Canlı kanalda da yalnızca kendi (etiket, uçuş) grubuna katılabilir.
+        await using var hub = Hub(tokenA);
+        await hub.StartAsync();
+        await hub.InvokeAsync("JoinBags", new[] { $"{tag}@{flightA}" });
+        await Assert.ThrowsAsync<HubException>(() => hub.InvokeAsync("JoinBags", new[] { $"{tag}@{flightB}" }));
+
+        // Personel her ikisini de görür.
+        var ops = await LoginAsync(client, "ops", "ops-demo-2026");
+        var other = await client.SendAsync(Get($"/v1/bags/{tag}?flight={flightB}", ops));
+        Assert.Equal(HttpStatusCode.OK, other.StatusCode);
+        Assert.Equal(flightB, (await other.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("flightId").GetString());
+    }
+
+    [Fact]
     public async Task Tampered_or_foreign_tokens_are_rejected()
     {
         var client = _factory.CreateClient();
@@ -170,7 +209,7 @@ public sealed class AuthTests(PostgresFixture fx) : IClassFixture<PostgresFixtur
         var client = _factory.CreateClient();
         var (pnr, tag) = await CreateBagAsync(client, "ZZ0403");
         var (_, otherTag) = await CreateBagAsync(client, "ZZ0403");
-        var passenger = await PassengerTokenAsync(client, pnr);
+        var (passenger, flight) = await PassengerLookupAsync(client, pnr);
 
         await using (var anonymous = Hub(null))
         {
@@ -179,8 +218,11 @@ public sealed class AuthTests(PostgresFixture fx) : IClassFixture<PostgresFixtur
 
         await using var hub = Hub(passenger);
         await hub.StartAsync();
-        await hub.InvokeAsync("JoinBags", new[] { tag });
-        await Assert.ThrowsAsync<HubException>(() => hub.InvokeAsync("JoinBags", new[] { otherTag }));
+        await hub.InvokeAsync("JoinBags", new[] { $"{tag}@{flight}" });
+        await Assert.ThrowsAsync<HubException>(() => hub.InvokeAsync("JoinBags", new[] { $"{otherTag}@{flight}" }));
+        // Eski biçim (yalnız etiket) ve bozuk anahtarlar reddedilir.
+        await Assert.ThrowsAsync<HubException>(() => hub.InvokeAsync("JoinBags", new[] { tag }));
+        await Assert.ThrowsAsync<HubException>(() => hub.InvokeAsync("JoinBags", new[] { $"{tag}@{flight}\n" }));
         await Assert.ThrowsAsync<HubException>(() => hub.InvokeAsync("JoinOps"));
 
         var ops = await LoginAsync(client, "ops", "ops-demo-2026");

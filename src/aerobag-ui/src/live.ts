@@ -3,13 +3,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type LiveStatus = "off" | "connecting" | "live" | "offline";
 
-export type LiveTarget = { kind: "ops" } | { kind: "bags"; tags: string[] };
+/** keys: "etiket@uçuş" biçiminde bavul anahtarları (bkz. bagKey). Yolcu jetonu bu çiftlere bağlıdır. */
+export type LiveTarget = { kind: "ops" } | { kind: "bags"; keys: string[] };
+
+export function bagKey(bagTag: string, flightId: string): string {
+  return `${bagTag}@${flightId}`;
+}
 
 async function join(connection: HubConnection, target: LiveTarget): Promise<void> {
   if (target.kind === "ops") {
     await connection.invoke("JoinOps");
   } else {
-    await connection.invoke("JoinBags", target.tags);
+    await connection.invoke("JoinBags", target.keys);
   }
 }
 
@@ -25,7 +30,7 @@ export function useLive(target: LiveTarget | null, token: string | null, event: 
   const tokenRef = useRef(token);
   tokenRef.current = token;
   const hasToken = token !== null;
-  const key = target === null ? "" : target.kind === "ops" ? "ops" : `bags:${[...target.tags].sort().join(",")}`;
+  const key = target === null ? "" : target.kind === "ops" ? "ops" : `bags:${[...target.keys].sort().join(",")}`;
 
   useEffect(() => {
     if (target === null || !hasToken) {

@@ -74,7 +74,8 @@ Açık kalanlar:
 | PNR + soyad deneyerek başka yolcunun bilgisine ulaşmak | IP başına dakikada 20 sorgu; "kayıt yok", "PNR yanlış" ve "soyad yanlış" aynı yanıtı verir; yanıtta ad ve PNR yok | `PassengerLookupTests` |
 | Veritabanı sızarsa yolcu kimliklerinin çıkması | Ad, soyad ve PNR saklanmaz; yalnızca gizli anahtarlı HMAC özetleri. Ham Type B metninde ad (`.P/`) ve PNR (`.L/`) satırları maskelenir, ölü mektup hata metninden de temizlenir | `PassengerLookupTests.Passenger_is_stored_only_as_hmac_key...`, `AppendOnlyTests` (ham metin, ölü mektup), `TypeBRedactorTests` |
 | Kapıda sunulan PNR'ın saklanması | Sunulan PNR yalnızca bellekte özetlenir; hiçbir tabloya yazılmaz | `GateTests.Owner_is_cleared_and_the_presented_pnr_is_never_stored` (tüm tablolarda arama) |
-| Yolcu jetonuyla başkasının bavulunu görmek | Yolcu jetonu yalnızca sorgudaki etiketleri taşır; başka bavul 404 (varlığı sızdırılmaz); canlı kanalda başka bavul grubuna katılamaz | `AuthTests.Passenger_token_sees_only_its_own_bag`, `AuthTests.Live_channel_requires_a_token_and_checks_groups` |
+| Yolcu jetonuyla başkasının bavulunu görmek | Yolcu jetonu yalnızca sorgudaki bavulları `etiket@uçuş` çifti olarak taşır; başka bavul 404 (varlığı sızdırılmaz); canlı kanalda başka bavul grubuna katılamaz | `AuthTests.Passenger_token_sees_only_its_own_bag`, `AuthTests.Live_channel_requires_a_token_and_checks_groups` |
+| Yeniden kullanılan etiketle başka günün bavulunu görmek (etiket numaraları zamanla yeniden verilir) | Jeton iddiası ve canlı kanal grubu uçuşa bağlıdır (`bag:etiket@uçuş`); yolcu için `/v1/bags/{etiket}` uçuşu jetondan alır, başka uçuş istenirse 404 | `AuthTests.Passenger_token_is_bound_to_the_flight_not_only_the_tag` |
 | PNR ve soyadın sunucu kayıtlarına düşmesi | Sorgu `POST` gövdesindedir (adreste değil); istek adresini yazan kayıtlar uyarı düzeyine çekildi | Kod incelemesi (otomatik test yok) |
 | Canlı kanalın içerik sızdırması | Bildirimler içeriksizdir ("değişti"); ayrıntı yetkili uçtan çekilir | `OutboxRelayTests` |
 | Saklama süresi dolmuş verinin kalması | Teslimden 30 gün sonra arama özetleri rastgele değerle değiştirilir; yolcu artık bulunamaz | `RetentionTests` |
@@ -126,7 +127,7 @@ Otomatik güvenlik testleri gerçek API ve gerçek PostgreSQL ile (Testcontainer
 
 | Sınıf | Neyi dener |
 |---|---|
-| `AuthTests` | Jetonsuz erişim, yanlış parola ve bilinmeyen kullanıcının aynı yanıtı, rol ihlali, başkasının bavulu, değiştirilmiş ve başka anahtarla imzalanmış jeton, canlı kanal grup yetkisi |
+| `AuthTests` | Jetonsuz erişim, yanlış parola ve bilinmeyen kullanıcının aynı yanıtı, rol ihlali, başkasının bavulu, yeniden kullanılan etiketle başka uçuşun bavulu, değiştirilmiş ve başka anahtarla imzalanmış jeton, canlı kanal grup yetkisi |
 | `IngestSignatureTests` | İmzasız, yanlış anahtar, bilinmeyen kaynak, değiştirilmiş gövde, zaman penceresi dışı, tekrar oynatma, kapsam dışı uç |
 | `AppendOnlyTests` | Uygulama rolü ve tablo sahibiyle olay günlüğünü değiştirme/silme, her tabloda silme, ölü mektup okuma, tablo oluşturma; ham metinde kişisel veri |
 | `GateTests` | Sahip, aile, başkası, zayıf sinyal, bilinmeyen etiket, sıra dışı okuma, tekrar paket, imza/kapsam, geçersiz paket, bayrak kapalı, sunulan PNR'ın hiçbir tabloda bulunmaması, inceleme yetkisi |

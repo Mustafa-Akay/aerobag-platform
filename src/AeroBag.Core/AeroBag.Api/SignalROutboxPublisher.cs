@@ -4,7 +4,10 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace AeroBag.Api;
 
-/// <summary>Outbox mesajını içeriksiz SignalR bildirimlerine çevirir.</summary>
+/// <summary>
+/// Outbox mesajını içeriksiz SignalR bildirimlerine çevirir. Bavul grubu (etiket, uçuş) çiftiyle adlandırılır
+/// (bkz. <see cref="LiveHub.BagGroup"/>); uçuşu olmayan bir yük hiçbir bavul grubuna gitmez.
+/// </summary>
 public sealed class SignalROutboxPublisher(IHubContext<LiveHub> hub) : IOutboxPublisher
 {
     public async Task PublishAsync(OutboxMessage message, CancellationToken ct)
@@ -12,24 +15,29 @@ public sealed class SignalROutboxPublisher(IHubContext<LiveHub> hub) : IOutboxPu
         using var doc = JsonDocument.Parse(message.PayloadJson);
         var root = doc.RootElement;
 
-        if (root.TryGetProperty("bagTag", out var tag) && tag.GetString() is { } bagTag)
+        var flightId = root.TryGetProperty("flightId", out var flight) && flight.ValueKind == JsonValueKind.String
+            ? flight.GetString()
+            : null;
+
+        if (flightId is not null && root.TryGetProperty("bagTag", out var tag) && tag.ValueKind == JsonValueKind.String
+            && tag.GetString() is { } bagTag)
         {
-            await hub.Clients.Group(LiveHub.BagGroup(bagTag)).SendAsync("bagChanged", new { bagTag }, ct);
+            await hub.Clients.Group(LiveHub.BagGroup(bagTag, flightId)).SendAsync("bagChanged", new { bagTag }, ct);
         }
 
         // Uçuş düzeyindeki değişiklik (örn. bant ataması): o uçuştaki her bavulun grubuna ayrı bildirim.
-        if (root.TryGetProperty("bagTags", out var tags) && tags.ValueKind == JsonValueKind.Array)
+        if (flightId is not null && root.TryGetProperty("bagTags", out var tags) && tags.ValueKind == JsonValueKind.Array)
         {
             foreach (var t in tags.EnumerateArray())
             {
-                if (t.GetString() is { } each)
+                if (t.ValueKind == JsonValueKind.String && t.GetString() is { } each)
                 {
-                    await hub.Clients.Group(LiveHub.BagGroup(each)).SendAsync("bagChanged", new { bagTag = each }, ct);
+                    await hub.Clients.Group(LiveHub.BagGroup(each, flightId)).SendAsync("bagChanged", new { bagTag = each }, ct);
                 }
             }
         }
 
-        if (root.TryGetProperty("flightId", out var flight) && flight.GetString() is { } flightId)
+        if (flightId is not null)
         {
             await hub.Clients.Group(LiveHub.OpsGroup).SendAsync("flightsChanged", new { flightId }, ct);
         }

@@ -137,11 +137,16 @@ public sealed class TokenService(AuthSettings settings, TimeProvider clock)
         return Issue([new Claim(Roles.SubjectClaim, user.Username), new Claim(Roles.RoleClaim, user.Role)], settings.StaffTokenLifetime);
     }
 
-    /// <summary>Yolcu jetonu: yalnızca sorguda bulunan bagaj etiketlerine erişim verir.</summary>
-    public IssuedToken IssuePassenger(IEnumerable<string> bagTags)
+    /// <summary>
+    /// Yolcu jetonu: yalnızca sorguda bulunan bavullara, o bavulun uçuşuyla birlikte erişim verir. Her iddia
+    /// "etiket@uçuş" biçimindedir (bkz. <see cref="BagKey"/>): etiket numaraları zamanla yeniden kullanıldığı için
+    /// yalnız etiket, başka bir günün aynı etiketli bavulunu da açardı.
+    /// </summary>
+    public IssuedToken IssuePassenger(IEnumerable<(string BagTag, string FlightId)> bags)
     {
         var claims = new List<Claim> { new(Roles.SubjectClaim, "passenger"), new(Roles.RoleClaim, Roles.Passenger) };
-        claims.AddRange(bagTags.Distinct(StringComparer.Ordinal).Select(t => new Claim(Roles.BagClaim, t)));
+        claims.AddRange(bags.Select(b => BagKey.Format(b.BagTag, b.FlightId)).Distinct(StringComparer.Ordinal)
+            .Select(k => new Claim(Roles.BagClaim, k)));
         return Issue(claims, settings.PassengerTokenLifetime);
     }
 
@@ -166,9 +171,67 @@ public static class ClaimsPrincipalExtensions
 {
     public static bool IsStaff(this ClaimsPrincipal user) => user.IsInRole(Roles.Ops) || user.IsInRole(Roles.Security);
 
-    /// <summary>Personel tüm bagajlara, yolcu yalnızca jetonundaki bagajlara erişebilir.</summary>
-    public static bool CanSeeBag(this ClaimsPrincipal user, string bagTag) =>
-        user.IsStaff() || (user.IsInRole(Roles.Passenger) && user.FindAll(Roles.BagClaim).Any(c => c.Value == bagTag));
+    /// <summary>Personel tüm bavullara, yolcu yalnızca jetonundaki (etiket, uçuş) çiftlerine erişebilir.</summary>
+    public static bool CanSeeBag(this ClaimsPrincipal user, string bagTag, string flightId) =>
+        user.IsStaff() || PassengerFlightsFor(user, bagTag).Contains(flightId, StringComparer.Ordinal);
+
+    /// <summary>Yolcu jetonunda bu etiketle eşleşen uçuşlar (personel ve diğer roller için boş).</summary>
+    public static IReadOnlyList<string> PassengerFlightsFor(this ClaimsPrincipal user, string bagTag)
+    {
+        if (!user.IsInRole(Roles.Passenger))
+        {
+            return [];
+        }
+
+        return user.FindAll(Roles.BagClaim)
+            .Select(c => BagKey.TryParse(c.Value, out var key) ? key : default)
+            .Where(k => k.BagTag == bagTag)
+            .Select(k => k.FlightId)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+}
+
+/// <summary>
+/// Bir bavulun yolcuya ve canlı kanala açılan kimliği: "etiket@uçuş" (örn. 0891000000@ZZ0100-20261030).
+/// Etiket 10 hanedir; uçuş kimliği veritabanındaki flight_id biçimindedir.
+/// </summary>
+public readonly record struct BagKey(string BagTag, string FlightId)
+{
+    public static string Format(string bagTag, string flightId) => $"{bagTag}@{flightId}";
+
+    public override string ToString() => Format(BagTag, FlightId);
+
+    public static bool TryParse(string? value, out BagKey key)
+    {
+        key = default;
+        // Biçim: 10 ASCII rakam, '@', 1-40 karakter [A-Z0-9-] (flight_id sütunuyla aynı sınır).
+        if (value is null || value.Length < 12 || value.Length > 51 || value[10] != '@')
+        {
+            return false;
+        }
+
+        var tag = value.AsSpan(0, 10);
+        var flight = value.AsSpan(11);
+        foreach (var c in tag)
+        {
+            if (!char.IsAsciiDigit(c))
+            {
+                return false;
+            }
+        }
+
+        foreach (var c in flight)
+        {
+            if (!(char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c) || c == '-'))
+            {
+                return false;
+            }
+        }
+
+        key = new BagKey(tag.ToString(), flight.ToString());
+        return true;
+    }
 }
 
 public sealed record LoginRequest(string? Username, string? Password);

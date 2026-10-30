@@ -35,7 +35,7 @@ Son güncelleme: 26 Ekim 2026. Kapsam: Faz 1, Faz 2 ve Faz 3 (dayanıklılık, �
 - **Referans an (`asOfUtc`).** Simülasyonda "şimdi", BSM olmayan olayların en son zamanıdır (sanal saat). Gerçek kurulumda gerçek saat olmalıdır.
 - **Yolcu verisi.** Ad, soyad ve PNR düz metin saklanmaz; yalnızca `HMAC-SHA256(gizli anahtar, PNR|soyad)` arama anahtarı tutulur. Faz 4.3'e kadar olay günlüğündeki ham BSM metni ad ve PNR satırlarını içeriyordu; bu düzeltildi (aşağıda). Geliştirme varsayılan anahtarı kodda durur; gerçek kurulumda `Security__LookupKeySecret` verilmelidir.
 - **Bant numarası** saklanmıyor, arayüzde gösterilmiyor (AODB bağlamı yok).
-- **Canlı bildirim.** `/hubs/live` kanalı içeriksizdir: `bagChanged` (grup `bag:{etiket}`) ve `flightsChanged` (grup `ops`). İstemci ayrıntıyı REST ile yeniden çeker. Canlı bağlantı varken yoklama 20 sn'ye, yokken 3 sn'ye ayarlıdır.
+- **Canlı bildirim.** `/hubs/live` kanalı içeriksizdir: `bagChanged` (grup `bag:{etiket}@{uçuş}`, W12a'dan beri) ve `flightsChanged` (grup `ops`). İstemci ayrıntıyı REST ile yeniden çeker. Canlı bağlantı varken yoklama 20 sn'ye, yokken 3 sn'ye ayarlıdır.
 - **Outbox garantisi.** En az bir kez teslim, `seq` sırası, 5 başarısız denemeden sonra mesaj bekletilir. Tek örnek varsayılır.
 
 ## Bilinen eksikler ve riskler
@@ -120,8 +120,8 @@ Tasarımdan farklar ve bilinen sınırlar:
 
 - **Roller:** `passenger`, `ops`, `security`. Jetonlar HS256 imzalı, kısa ömürlü (personel 15 dk, yolcu 30 dk), `iss`/`aud`/süre doğrulanır, saat kayması payı 30 sn.
 - **Personel girişi:** `POST /v1/auth/token` (IP başına dakikada 10). Parolalar PBKDF2-SHA256 (600.000 yineleme) ile saklanır, karşılaştırma sabit sürelidir. Yanlış kullanıcı adı ve yanlış parola aynı yanıtı verir; bilinmeyen kullanıcıda da aynı maliyette doğrulama yapılır.
-- **Yolcu jetonu:** `/v1/lookup` (PNR + soyad) başarılıysa yanıtta yolcu jetonu döner. Jetonda kişisel veri yoktur, yalnızca o sorgudaki bagaj etiketleri vardır.
-- **Uç başına politika:** `/v1/flights` ve `/v1/flights/sla` yalnızca personel. `/v1/bags/{etiket}` personel ya da jetonunda o etiket bulunan yolcu; yetkisiz bagaj için 404 (varlığı sızdırılmaz). Canlı kanal (`/hubs/live`) jeton ister; `JoinOps` yalnızca personel, `JoinBags` yalnızca yetkili etiketler.
+- **Yolcu jetonu:** `/v1/lookup` (PNR + soyad) başarılıysa yanıtta yolcu jetonu döner. Jetonda kişisel veri yoktur, yalnızca o sorgudaki bavullar vardır (W12a'dan beri `etiket@uçuş` çifti olarak).
+- **Uç başına politika:** `/v1/flights` ve `/v1/flights/sla` yalnızca personel. `/v1/bags/{etiket}` personel ya da jetonunda o etiket bulunan yolcu (W12a'dan beri uçuşla birlikte); yetkisiz bagaj için 404 (varlığı sızdırılmaz). Canlı kanal (`/hubs/live`) jeton ister; `JoinOps` yalnızca personel, `JoinBags` yalnızca yetkili etiketler.
 - **Arayüz:** operasyon panosu giriş formu gösterir; jeton sekme oturumunda (`sessionStorage`) tutulur, 401/403 gelince oturum kapanır.
 - **Testler:** parola özeti birim testleri; gerçek API ve PostgreSQL ile yetkisiz erişim, yanlış rol, başka bagaja erişim, değiştirilmiş ve başka anahtarla imzalanmış jeton, canlı kanal grup yetkisi.
 
@@ -413,3 +413,18 @@ Bilinen sınırlar:
   - **Operasyon saati sorgusu:** tabloyu baştan sona tarıyordu (~183 bin olayda 23,7 ms, tabloyla doğrusal büyür). Göç `0005_event_clock_index` kısmi indeks ekler; sorgu artık 0,1 ms sürüyor.
 - **Darboğaz:** PostgreSQL'in işlemcisi (yük altında ~6,6 çekirdek). Disk yazması değil; `synchronous_commit = off` yalnızca %6 kazandırdı. Sonraki adımlar (otomatik hazırlanmış sorgular, mesaj başına daha az sorgu, toplu işleme) ölçülmedi.
 - **Testler:** yük testinin ürettiği mesajlar gerçek ayrıştırıcıdan geçiyor ve sırayla yaşam döngüsünü taşıyor; etiketler çakışmıyor.
+
+## Faz 6, W12a: yolcu jetonu uçuşa bağlı
+
+- **Açık:** yolcu jetonu bavulu yalnızca etiket numarasıyla tanıyordu. Etiket numaraları zamanla yeniden kullanılır (şemada da `UNIQUE (bag_tag_number, flight_id)`). Uçuş belirtilmeyen `/v1/bags/{etiket}` en son güncellenen satırı döndürdüğü için, aynı etiket sonradan başka bir yolcunun bavuluna verildiğinde eski yolcu jetonun süresi içinde o bavulun durumunu görebiliyordu; canlı kanalda da onun bildirimlerini alıyordu.
+- **Düzeltme:**
+  - Jeton her bavulu `etiket@uçuş` olarak taşır (örn. `0891000000@ZZ0100-20261030`).
+  - Yolcu için `/v1/bags/{etiket}` uçuşu jetondan alır. Başka bir uçuş istenirse 404 döner (varlığı sızdırılmaz). Personel için davranış aynı.
+  - Canlı kanal grupları `bag:etiket@uçuş`. `JoinBags` bu biçimde anahtar ister; eski biçim (yalnız etiket) ve bozuk anahtarlar reddedilir. Uçuşu olmayan bir outbox yükü hiçbir bavul grubuna gitmez.
+  - Yolcu sayfası canlı kanala bu anahtarlarla katılır. Eski biçimdeki bir yolcu jetonu yeni sürümde canlı kanala katılamaz ve bavul uçlarında 404 alır; yolcunun yeniden sorgu yapması yeter (jeton 30 dk geçerli).
+- **Testler:** aynı etiket 22 ve 23 Ekim'de iki ayrı yolcuda; A yolcusu uçuş belirtmeden kendi bavulunu görür, B'ninkini ne REST'te ne canlı kanalda görebilir, personel ikisini de görür. Anahtar biçimi ayrıca birim testiyle sınanır (eksik hane, küçük harf, satır sonu, ASCII olmayan rakam, uzunluk sınırı).
+- **Aynı PR'da, canlı denemede bulunan: aralıklı "ML yanıt vermedi" uyarısı.**
+  - **Belirti:** ML servisi her isteğe 200 dönerken API arada bir zaman aşımı bildiriyordu.
+  - **Neden:** API'nin varsayılan ML adresi `http://localhost:8000` idi; docker-compose servisi yalnızca IPv4'te (`127.0.0.1:8000`) yayınlar. Windows `localhost`'u önce `::1` (IPv6) ile dener ve orada dinleyen olmadığını ~2 sn sonra anlar. Bağlantı havuzundaki bağlantı boşta kalıp kapanınca her yeni bağlantı bu gecikmeyi ödüyor, 2 sn'lik zaman aşımına takılıyordu.
+  - **Ölçüm (Windows, PowerShell `Invoke-RestMethod /health`):** `localhost` 2.167 ms, `127.0.0.1` 26 ms.
+  - **Düzeltme:** varsayılan adres `http://127.0.0.1:8000`. Uyarı çıkmayan durumlarda da yeni bağlantı kuran yolcu sorguları ~2 sn bekliyordu; bu da kalktı.

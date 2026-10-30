@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ApiError, lookup, type LookupResult } from "../api";
 import { BagTagCard } from "../components/BagTagCard";
 import { clockTime } from "../format";
-import { useCoalescedTick, useLive } from "../live";
+import { bagKey, useCoalescedTick, useLive } from "../live";
 
 type Query = { pnr: string; surname: string };
 const POLL_FAST_MS = 3000; // canlı bağlantı yokken
@@ -50,8 +50,8 @@ export function PassengerPage() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const [tick, signal] = useCoalescedTick((60_000 / LOOKUP_LIMIT_PER_MIN) * 1.5);
-  const tags = useMemo(() => result?.bags.map((b) => b.bagTag) ?? [], [result]);
-  const live = useLive(tags.length > 0 ? { kind: "bags", tags } : null, result?.accessToken ?? null, "bagChanged", signal);
+  const keys = useMemo(() => result?.bags.map((b) => bagKey(b.bagTag, b.flightId)) ?? [], [result]);
+  const live = useLive(keys.length > 0 ? { kind: "bags", keys } : null, result?.accessToken ?? null, "bagChanged", signal);
   const pollMs = useRef(POLL_FAST_MS);
   pollMs.current = live === "live" ? POLL_SLOW_MS : POLL_FAST_MS;
 

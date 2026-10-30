@@ -80,6 +80,15 @@ public sealed class SourceVerifier(IngestSettings settings, TimeProvider clock)
 
     private readonly ConcurrentDictionary<string, DateTimeOffset> _seen = new(StringComparer.Ordinal);
 
+    /// <summary>Son temizliğin zamanı (tick). Temizlik en fazla <see cref="SweepInterval"/>'da bir, tek iş parçacığında yapılır.</summary>
+    private long _lastSweepTicks;
+
+    /// <summary>
+    /// W7 yük testinden önce önbellek 50.000 kaydı aşınca temizlik her istekte yapılıyordu: kayıtlar 10 dk geçerli olduğu için
+    /// yoğun akışta (≥ ~83 istek/sn) hiçbiri silinmiyor, her istek bütün önbelleği dolaşıyordu (istek başına O(n)).
+    /// </summary>
+    internal static readonly TimeSpan SweepInterval = TimeSpan.FromSeconds(30);
+
     public async Task<VerifyResult> VerifyAsync(HttpContext ctx, string scope)
     {
         var req = ctx.Request;
@@ -135,10 +144,16 @@ public sealed class SourceVerifier(IngestSettings settings, TimeProvider clock)
         return new VerifyResult(VerifyStatus.Ok, source.Id);
     }
 
-    /// <summary>Nonce'u kaydeder; daha önce görüldüyse false. Önbellek büyüyünce süresi geçmiş kayıtlar atılır.</summary>
+    /// <summary>
+    /// Nonce'u kaydeder; daha önce görüldüyse false. Süresi geçmiş kayıtlar (zaman penceresinin iki katı) en fazla 30 sn'de bir,
+    /// tek bir istek tarafından atılır; diğer istekler beklemez. Pencere dışındaki istek zaten zaman damgası denetiminde
+    /// reddedildiği için atılan nonce'un tekrar oynatılması mümkün değildir.
+    /// </summary>
     private bool Remember(string key, DateTimeOffset now)
     {
-        if (_seen.Count > 50_000)
+        var last = Interlocked.Read(ref _lastSweepTicks);
+        if (now.UtcTicks - last > SweepInterval.Ticks
+            && Interlocked.CompareExchange(ref _lastSweepTicks, now.UtcTicks, last) == last)
         {
             foreach (var (k, at) in _seen)
             {

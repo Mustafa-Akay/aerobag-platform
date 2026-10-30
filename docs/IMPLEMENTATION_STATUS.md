@@ -395,3 +395,21 @@ Bilinen sınırlar:
     - dört uç ve `/health` sözleşmeye uyuyor;
     - her sözleşme dosyası kullanılıyor;
     - biçim karşılaştırması tam sayı ile ondalığı aynı, mantıksalı farklı sayıyor.
+
+## Faz 6, W7: yük testi
+
+- **Araç:** `--mode load`. İmzalı Type B mesajlarını API'ye eşzamanlı gönderir.
+  - Her bavulun yedi mesajı sırayla gider, eşzamanlılık bavullar arasındadır.
+  - Rastgele etiket ve uçuş numaraları kullanılır; tohuma zaman katılır, her çalıştırma yeni bavul üretir.
+  - Isınma koşusu sonuca katılmaz.
+  - Eşzamanlılık düzeyi başına saniyedeki mesaj, gecikme yüzdelikleri (p50/p95/p99) ve yanıt kodları raporlanır; 10 sn'de bir ara rapor verilir.
+- **Sonuç** (`EVALUATION.md`, "Yük testi"; i5-13500H, Docker'da PostgreSQL):
+  - tek bağlantıda 149 mesaj/sn;
+  - 64 eşzamanlılıkta 1.841 mesaj/sn (saatte ~6,6 milyon), p95 59 ms;
+  - hata yok.
+  - Yoğun bir havalimanının yoğun saati için hesaplanan hedef ~17 mesaj/sn.
+- **Ölçümle bulunan ve düzeltilen:**
+  - **Nonce önbelleği:** 50 bin kaydı aşınca her istekte bütün önbelleği dolaşıyordu. Temizlik artık en fazla 30 sn'de bir, tek iş parçacığında yapılıyor. Uzun koşudaki %29'luk yavaşlama kalktı.
+  - **Operasyon saati sorgusu:** tabloyu baştan sona tarıyordu (~183 bin olayda 23,7 ms, tabloyla doğrusal büyür). Göç `0005_event_clock_index` kısmi indeks ekler; sorgu artık 0,1 ms sürüyor.
+- **Darboğaz:** PostgreSQL'in işlemcisi (yük altında ~6,6 çekirdek). Disk yazması değil; `synchronous_commit = off` yalnızca %6 kazandırdı. Sonraki adımlar (otomatik hazırlanmış sorgular, mesaj başına daha az sorgu, toplu işleme) ölçülmedi.
+- **Testler:** yük testinin ürettiği mesajlar gerçek ayrıştırıcıdan geçiyor ve sırayla yaşam döngüsünü taşıyor; etiketler çakışmıyor.

@@ -387,3 +387,76 @@ Tespit gecikmesi her satırda tam tolerans süresidir: kalkıştan 10 dk, indirm
 - AODB zamanları hatasız varsayıldı.
 - ML servisi ölçüme dahil değil; `typical` ve `minimal` profillerde indirme sonrası ETA canlı sistemde daha iyi olabilir.
 - Çıkış kapısı okumasının her bavulda olduğu varsayıldı (yalnızca "sıra dışı" sayımı için).
+
+## Yük testi (W7)
+
+**Soru:** sistem yoğun bir havalimanının yoğun saatini taşır mı, darboğaz nerede?
+
+**Ortam (bu makine, bu ayarlar):**
+- Intel Core i5-13500H (12 çekirdek, 16 iş parçacığı), Windows.
+- PostgreSQL 16 Docker Desktop'ta (WSL2, 7,6 GB bellek sınırı).
+- API ve yük üretici aynı makinede; ikisi de Release derlemesi, tam okuma kapsamı.
+- Her mesaj imzalı (HMAC) bir HTTP isteğidir. API, mesaj başına bir veritabanı işleminde kilit, tekrar denetimi, uçuş, yolcu, bavul, olay ve outbox kayıtlarını yazar.
+
+**Komut:** `dotnet run -c Release --project src\AeroBag.Core\AeroBag.Simulator -- --mode load --concurrency 1,8,32`
+- Her bavulun yedi mesajı (BSM'den banttan almaya) sırayla gider; eşzamanlılık bavullar arasındadır.
+- Bavullar rastgele etiket ve uçuş numarasıyla üretilir, tekrar yoktur.
+
+**Hedef iş yükü** (kaba mertebe, varsayımlar açık):
+- İstanbul Havalimanı 2025'te yaklaşık 84 milyon yolcu karşıladı (DHMİ ve havalimanı işletmecisi verisi), günde ortalama ~230 bin.
+- Günün ~18 aktif saatinde ortalamanın 1,5 katı yoğun saat varsayımıyla saatte ~19 bin yolcu.
+- Yolcu başına 0,8 kayıtlı bavul ve bu havalimanında bavul başına ~4 mesaj varsayımıyla saatte ~61 bin mesaj, yani **saniyede ~17 mesaj**.
+- Hedef: 20 mesaj/sn, 5 kat payla 100 mesaj/sn.
+
+### Kapasite
+
+| Eşzamanlılık | Mesaj/sn | Saatte mesaj | Gecikme p50 / p95 / p99 | Hata |
+|---|---|---|---|---|
+| 1 | 149 | 536 bin | 6,2 / 10,3 / 12,0 ms | 0 |
+| 8 | 723 | 2,6 milyon | 10,5 / 14,1 / 16,9 ms | 0 |
+| 32 | 1.572 | 5,7 milyon | 19,4 / 30,3 / 38,0 ms | 0 |
+| 64 | 1.841 | 6,6 milyon | 32,4 / 58,8 / 76,1 ms | 0 |
+
+Satırların ölçüldüğü koşullar:
+- **1 ve 8:** düzeltmelerden önceki 2.100 mesajlık koşulardan; bu kısa koşularda iki düzeltmenin etkisi görülmez.
+- **32:** nonce düzeltmesinden sonra, indeksten önce, 60 bin mesaj.
+- **64:** iki düzeltmeden sonra, 60 bin mesaj.
+
+**Sonuç:** bu makinede tek bağlantıyla saatte ~536 bin, 64 eşzamanlılıkta ~6,6 milyon mesaj, p95 59 ms. Hedefin (saatte ~61 bin) tek bağlantıda ~9 katı, 64 eşzamanlılıkta 100 katından fazlası.
+
+### Ölçümle bulunan ve düzeltilen iki sorun
+
+**1. Nonce önbelleği.** İmza doğrulaması tekrar oynatmayı önlemek için her isteğin nonce'unu 10 dk saklar. Önbellek 50 bin kaydı aşınca süresi geçenleri her istekte temizlemeye çalışıyordu. Yoğun akışta (saniyede ≥ ~83 istek) 10 dk içinde hiçbir kayıt süresini doldurmadığı için her istek bütün önbelleği dolaşıyordu. 60 bin mesajlık koşuda hız zamanla düşüyordu. Düzeltme: temizlik en fazla 30 sn'de bir, tek bir istek tarafından yapılır.
+
+| 60 bin mesaj, eşzamanlılık 32 | 0-10 sn | 10-20 sn | 20-30 sn | Son bölüm | Ortalama | p99 |
+|---|---|---|---|---|---|---|
+| Düzeltmeden önce | 1.757 | 1.612 | 1.369 | 1.150 | 1.462 | 44,5 ms |
+| Sonra, boş veritabanı | 1.413 (ısınma) | 1.621 | 1.639 | ~1.619 | 1.572 | 38,0 ms |
+| Sonra, 60 bin olaylı veritabanı | 1.532 | 1.561 | 1.414 | ~1.508 | 1.502 | 39,7 ms |
+
+Koşu sonundaki %29'luk düşüş kalktı. Veritabanının 60 bin olay büyümesinin etkisi ~%4,5.
+
+**2. Operasyon saati sorgusu.** "Şimdi"yi veren sorgu (`max(occurred_at_utc)`, BSM dışı olaylar) her yolcu sorgusunda, operasyon panosunda ve arka plan işlerinde 2-5 sn'de bir çalışır. Tabloyu baştan sona tarıyordu: ~183 bin olayda 23,7 ms, ve süre tabloyla doğrusal büyür; 10 milyon olayda ~1,3 sn olurdu. Göç `0005_event_clock_index` kısmi bir indeks ekler. Sorgu indeksin sonundan okunur: **0,1 ms**, tablo büyüdükçe değişmez. Yük testinde 64 eşzamanlılıkta hız 1.745'ten 1.841 mesaj/sn'ye çıktı (+%5,5).
+
+### Darboğaz
+
+| Deney | Sonuç | Çıkarım |
+|---|---|---|
+| Eşzamanlılık 32'den 64'e | Hız +%11 (1.572'den 1.745'e), p50 19'dan 34 ms'ye | Bir tavana yaklaşılıyor, istekler sıraya giriyor |
+| `synchronous_commit = off` (commit diske beklenmeden onaylanır) | Hız +%6 (1.572'den 1.668'e) | Disk yazması darboğaz değil |
+| Yük altında `docker stats` | PostgreSQL ~%663 CPU (~6,6 çekirdek) | **Darboğaz PostgreSQL'in işlemcisi** |
+
+Mesaj başına bir işlemde yaklaşık yedi sorgu ayrıştırılıp yürütülüyor. Ölçeği büyütmenin sıradaki adımları, ölçülmedi:
+- Npgsql'in otomatik hazırlanmış sorguları (`Max Auto Prepare`), ayrıştırma maliyetini düşürür;
+- mesaj başına sorgu sayısını azaltmak, ör. uçuş kaydını her mesajda değil bir kez eklemek;
+- mesajları toplu işlemek.
+
+### Sınırlar
+- Yük üretici, API ve veritabanı aynı makinede, yani işlemciyi paylaşıyor. Ayrı makinelerde sonuç farklıdır.
+- Ağ gecikmesi yok (localhost).
+- Yük yalnızca mesaj alımıdır. Yolcu sorgusu ve operasyon panosu aynı anda yüklenmedi; yolcu sorgusu IP başına hız sınırlıdır.
+- Arka plan işleri (outbox, uyarılar, çıkış süresi) ölçüm boyunca çalışıyordu, ama outbox gecikmesi ayrıca ölçülmedi.
+- Hedef iş yükü kaba bir mertebe tahminidir. Aktarma bavulları ve gerçek mesaj dağılımı modellenmedi.
+
+### Kaynaklar
+- İstanbul havalimanları 2025 yolcu sayıları (DHMİ ve havalimanı işletmecileri, Anadolu Ajansı haberi): https://www.memurlar.net/haber/1155838/istanbul-havalimanlari-2025-i-rekorlarla-kapatti-132-milyon-yolcu.html

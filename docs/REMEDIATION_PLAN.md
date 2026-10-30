@@ -145,8 +145,8 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W3 Bant numarası | Tamam (PR birleştirildi) |
 | W4 Kayıp bavul tespiti | Tamam (PR'lar birleştirildi) |
 | W5 Okuma kapsamı profilleri | Tamam (PR birleştirildi) |
-| W6 ML sözleşme testi | Yazıldı, test bekliyor (branch `faz6/w6-ml-contract`) |
-| W7 Yük testi | Başlamadı |
+| W6 ML sözleşme testi | Tamam (PR birleştirildi) |
+| W7 Yük testi | Ölçüldü, PR bekliyor (branch `faz6/w7-load-test`) |
 | W8 Öncelikli bavul | Başlamadı |
 | W9 İngilizce arayüz | Başlamadı |
 | W10 Aktarma bavulu | Başlamadı |

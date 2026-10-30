@@ -26,6 +26,9 @@ if (a.ContainsKey("help"))
                      --drop-rate P --corrupt-rate P   okuma kaybı (varsayılan 0.01, 0.005)
           coverage-eval modu: okuma kapsamına duyarlılığı API'siz ölçer (varsayılan --flights 200); üç profil aynı gerçek
                      zaman çizelgesini görür. --drop-rate P --corrupt-rate P (varsayılan 0.01, 0.005)
+          load modu: API'ye imzalı mesajları eşzamanlı gönderir, mesaj/sn ve gecikme yüzdeliklerini ölçer (W7).
+                     --concurrency 1,8,32   denenecek eşzamanlılık düzeyleri   --count N   düzey başına mesaj (varsayılan 2100)
+                     Temiz bir veritabanında çalıştırın (docker compose down -v, göç aracı).
           tüm modlar:  --coverage full|typical|minimal   okuma kapsamı (varsayılan full). typical: bant ağzı ve banttan alma
                        okuması yok; minimal: yalnızca yükleme ve indirme. Canlı modda API de aynı profille açılmalı
                        (Coverage__Profile ortam değişkeni).
@@ -81,7 +84,7 @@ if (mode == "live" && coverage != AeroBag.Application.Coverage.ReadCoverage.Full
 {
     Console.WriteLine($"  Not: API de aynı kapsamla açılmalı: $env:Coverage__Profile=\"{coverage.Name}\" (yoksa bant okuması beklenir).");
 }
-foreach (var f in mode is "gate-eval" or "alert-eval" or "coverage-eval" ? Array.Empty<FlightResult>() : flights)
+foreach (var f in mode is "gate-eval" or "alert-eval" or "coverage-eval" or "load" ? Array.Empty<FlightResult>() : flights)
 {
     var first = f.Bags.Single(b => b.IsFirst);
     var last = f.Bags.Single(b => b.IsLast);
@@ -98,6 +101,38 @@ if (mode == "gate-eval")
     Console.WriteLine($"{packets} kapı paketi. Sensör hata oranları demo varsayımıdır (GateModel.cs).");
     Console.WriteLine(GateEvaluation.Report(thresholds.Select(t => GateEvaluation.Evaluate(flights, t)).ToList()));
     return 0;
+}
+
+if (mode == "load")
+{
+    var api = Get("api", "http://localhost:5080");
+    var secret = Get("source-secret", Environment.GetEnvironmentVariable("AEROBAG_SOURCE_SECRET") ?? SourceCredentials.Demo.Secret);
+    var creds = new SourceCredentials(Get("source-id", SourceCredentials.Demo.Id), secret);
+    var levels = Get("concurrency", "1,8,32").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(x => int.Parse(x, CultureInfo.InvariantCulture)).ToList();
+    var count = GetInt("count", 2100);
+    if (levels.Any(l => l is < 1 or > 256) || count < 7)
+    {
+        Console.Error.WriteLine("--concurrency 1-256 arası, --count en az 7 olmalı.");
+        return 1;
+    }
+
+    Console.WriteLine($"Yük testi: {api}, düzey başına {count} mesaj, eşzamanlılık {string.Join("/", levels)}.");
+    Console.WriteLine("Hedef (EVALUATION.md): yoğun bir havalimanının yoğun saati ~17 mesaj/sn; 5 kat pay ile 100 mesaj/sn.");
+    // Isınma: JIT, bağlantı havuzu ve veritabanı önbelleği; sonuca katılmaz.
+    // Tohuma zaman da katılır: her çalıştırma yeni bavullar üretir (aynı bavul tekrar gelirse API onu tekrar sayar ve ölçüm kirlenir).
+    var runSeed = unchecked(options.Seed * 397 + (int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() % 1_000_000));
+    await LoadTest.RunAsync(api, creds, 4, 140, runSeed + 999, CancellationToken.None);
+    var results = new List<LoadTest.Level>();
+    for (var i = 0; i < levels.Count; i++)
+    {
+        var r = await LoadTest.RunAsync(api, creds, levels[i], count, unchecked(runSeed + i * 7919), CancellationToken.None);
+        results.Add(r);
+        Console.WriteLine($"  eşzamanlılık {r.Concurrency}: {r.PerSecond:0.0} mesaj/sn, hata {r.Errors}");
+    }
+    Console.WriteLine();
+    Console.WriteLine(LoadTest.Report(results));
+    return results.Any(r => r.Outcomes.ContainsKey("CONNECTION_ERROR")) ? 2 : 0;
 }
 
 if (mode == "coverage-eval")
@@ -195,7 +230,7 @@ if (mode == "live")
     return counts.ContainsKey("CONNECTION_ERROR") ? 2 : 0;
 }
 
-Console.Error.WriteLine("--mode live, csv, gate-eval, alert-eval ya da coverage-eval olmalı.");
+Console.Error.WriteLine("--mode live, csv, gate-eval, alert-eval, coverage-eval ya da load olmalı.");
 return 1;
 
 Dictionary<string, string> ParseArgs(string[] argv)

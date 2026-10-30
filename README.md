@@ -104,7 +104,7 @@ cd ml; python -m pytest -q tests         # Python 3.12, ml/requirements.txt
 | `src/AeroBag.Core/AeroBag.Infrastructure` | PostgreSQL erişimi, olay işleme, kapı servisi, sorgular, outbox, saklama süresi |
 | `src/AeroBag.Core/AeroBag.Api` | Minimal API, kimlik doğrulama, imza doğrulama, SignalR, arka plan işleri |
 | `src/AeroBag.Core/AeroBag.Simulator` | Tohumlu bavul akışı ve kapı sensörü modeli, ExitGuard değerlendirmesi |
-| `src/aerobag-ui` | Yolcu sayfası, operasyon panosu, güvenlik ekranı |
+| `src/aerobag-ui` | Yolcu sayfası (Türkçe/İngilizce), operasyon panosu, güvenlik ekranı |
 | `ml` | Veri, modeller, değerlendirme ve FastAPI tahmin servisi |
 | `contracts/ml` | API ile ML servisi arasındaki istek/yanıt sözleşmesi (iki taraf da buna karşı test edilir) |
 | `tests` | Birim ve entegrasyon testleri |

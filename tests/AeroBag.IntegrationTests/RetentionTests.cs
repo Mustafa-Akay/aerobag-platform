@@ -57,12 +57,17 @@ public class RetentionTests(PostgresFixture fx) : IClassFixture<PostgresFixture>
     }
 
     [Fact]
-    public async Task Passenger_with_an_undelivered_bag_is_kept()
+    public async Task Passenger_with_an_undelivered_bag_is_kept_until_the_undelivered_limit()
     {
+        // Bant ağzında okuyucu olmayan kurulumda bavul "şutta" kalabilir; kayıp bavul da teslim edilmez (W5).
         var pnr = NewPnr();
         await BagAsync(pnr, delivered: false);
-        await Retention(TimeSpan.FromDays(90)).AnonymizeDueAsync();
+
+        await Retention(TimeSpan.FromDays(89)).AnonymizeDueAsync();
         Assert.NotNull(await Lookup().LookupAsync(pnr, "TUNA"));
+
+        await Retention(TimeSpan.FromDays(91)).AnonymizeDueAsync();
+        Assert.Null(await Lookup().LookupAsync(pnr, "TUNA"));
     }
 
     [Fact]

@@ -11,7 +11,12 @@ namespace AeroBag.Infrastructure;
 /// Gerçekleşen ilk bavul ilk banta geliş olayıdır; son bavul ise yalnızca uçuştaki tüm bavullar banta
 /// (ya da sonrasına) geçtiyse gerçekleşmiş sayılır. Ondan önce son bavul için model tahmini kullanılır.
 /// ML servisi kapalıysa tahmin yoktur: gerçekleşen ya da süresi dolmuş durumlar yine raporlanır, gerisi UNKNOWN olur.
+/// Okuma kapsamı (W5): bant ağzı okuması yoksa gerçekleşen ilk/son bavul, yer hizmetinin AODB'ye bildirdiği uçuş düzeyi
+/// zamanlardan (flight_milestones) gelir. Kaynak <see cref="FlightSla.TimesSource"/> alanında yazar.
 /// </summary>
+/// <param name="TimesSource">
+/// Gerçekleşen zamanların kaynağı: READS (bant ağzı okumaları), AODB (uçuş düzeyi bildirim) ya da NONE (henüz yok).
+/// </param>
 public sealed record FlightSla(
     string FlightId,
     string Assumption,
@@ -19,7 +24,8 @@ public sealed record FlightSla(
     double? ElapsedSec,
     bool AllBagsArrived,
     SlaLeg FirstBag,
-    SlaLeg LastBag);
+    SlaLeg LastBag,
+    string TimesSource);
 
 public sealed class SlaQueries(NpgsqlDataSource db, IMlPredictor ml, IOperationalClock? clock = null)
 {
@@ -28,7 +34,11 @@ public sealed class SlaQueries(NpgsqlDataSource db, IMlPredictor ml, IOperationa
     public const string Assumption = "DEMO_ASSUMPTION";
 
     private sealed record Row(string FlightId, int FirstTarget, int LastTarget, int Total, int NotArrived,
-        DateTimeOffset? FirstCarousel, DateTimeOffset? LastCarousel);
+        DateTimeOffset? FirstCarousel, DateTimeOffset? LastCarousel, DateTimeOffset? AodbFirst, DateTimeOffset? AodbLast);
+
+    public const string SourceReads = "READS";
+    public const string SourceAodb = "AODB";
+    public const string SourceNone = "NONE";
 
     public async Task<IReadOnlyList<FlightSla>> GetAsync(CancellationToken ct = default)
     {
@@ -41,8 +51,10 @@ public sealed class SlaQueries(NpgsqlDataSource db, IMlPredictor ml, IOperationa
                    (SELECT count(*)::int FROM bags b WHERE b.flight_id = f.flight_id),
                    (SELECT count(*)::int FROM bags b WHERE b.flight_id = f.flight_id
                       AND b.current_state IN ('CHECKED_IN','SECURITY_SCREENED','LOADED_ON_AIRCRAFT','UNLOADED_AT_ARRIVAL','INBOUND_CHUTE')),
-                   x.first_t, x.last_t
+                   x.first_t, x.last_t,
+                   m.first_bag_on_belt_utc, m.last_bag_on_belt_utc
             FROM flights f
+            LEFT JOIN flight_milestones m ON m.flight_id = f.flight_id
             LEFT JOIN LATERAL (
                 SELECT min(c.t) AS first_t, max(c.t) AS last_t
                 FROM (
@@ -60,7 +72,9 @@ public sealed class SlaQueries(NpgsqlDataSource db, IMlPredictor ml, IOperationa
             {
                 rows.Add(new Row(r.GetString(0), r.GetInt32(1), r.GetInt32(2), r.GetInt32(3), r.GetInt32(4),
                     r.IsDBNull(5) ? null : r.GetFieldValue<DateTimeOffset>(5),
-                    r.IsDBNull(6) ? null : r.GetFieldValue<DateTimeOffset>(6)));
+                    r.IsDBNull(6) ? null : r.GetFieldValue<DateTimeOffset>(6),
+                    r.IsDBNull(7) ? null : r.GetFieldValue<DateTimeOffset>(7),
+                    r.IsDBNull(8) ? null : r.GetFieldValue<DateTimeOffset>(8)));
             }
         }
 
@@ -73,19 +87,27 @@ public sealed class SlaQueries(NpgsqlDataSource db, IMlPredictor ml, IOperationa
             if (onBlock is null || now is null)
             {
                 var empty = new SlaLeg(row.FirstTarget, null, null, SlaStatus.Unknown, null, null, null, null);
-                result.Add(new FlightSla(row.FlightId, Assumption, onBlock, null, false, empty, empty with { TargetSec = row.LastTarget }));
+                result.Add(new FlightSla(row.FlightId, Assumption, onBlock, null, false, empty, empty with { TargetSec = row.LastTarget }, SourceNone));
                 continue;
             }
 
             var elapsed = Math.Max((now.Value - onBlock.Value).TotalSeconds, 0);
-            var allArrived = row.Total > 0 && row.NotArrived == 0;
-            double? firstActual = row.FirstCarousel is { } f ? (f - onBlock.Value).TotalSeconds : null;
-            double? lastActual = allArrived && row.LastCarousel is { } l ? (l - onBlock.Value).TotalSeconds : null;
+            // Bant okumaları varsa onlar, yoksa AODB'nin uçuş düzeyi zamanları. Son bavul: okumalarda tüm bavullar banda
+            // gelmiş olmalı; AODB "son bavul bantta" dediyse o geçerlidir (kayıp bavul bunu bekletmez).
+            var readsAllArrived = row.Total > 0 && row.NotArrived == 0 && row.LastCarousel is not null;
+            var firstTime = row.FirstCarousel ?? row.AodbFirst;
+            var lastTime = readsAllArrived ? row.LastCarousel : row.AodbLast;
+            var allArrived = readsAllArrived || row.AodbLast is not null;
+            var source = row.FirstCarousel is not null || readsAllArrived ? SourceReads
+                : firstTime is not null || lastTime is not null ? SourceAodb
+                : SourceNone;
+            double? firstActual = firstTime is { } f ? (f - onBlock.Value).TotalSeconds : null;
+            double? lastActual = lastTime is { } l ? (l - onBlock.Value).TotalSeconds : null;
             var forecast = firstActual is null || lastActual is null ? await ml.PredictAsync(ctx!, ct) : null;
 
             var first = SlaRisk.Evaluate(row.FirstTarget, firstActual, elapsed, forecast?.First);
             var last = SlaRisk.Evaluate(row.LastTarget, lastActual, elapsed, forecast?.Last);
-            result.Add(new FlightSla(row.FlightId, Assumption, onBlock, elapsed, allArrived, first, last));
+            result.Add(new FlightSla(row.FlightId, Assumption, onBlock, elapsed, allArrived, first, last, source));
         }
 
         return result;

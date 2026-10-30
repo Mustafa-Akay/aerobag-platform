@@ -26,8 +26,11 @@ public static class AlertEvaluation
     /// toleransından sonra görünür. Aralık boşsa null.
     /// </summary>
     public static (DateTimeOffset From, DateTimeOffset To)? PassengerWindow(
-        (DateTimeOffset Opened, DateTimeOffset? Closed, string Kind) alert, FlightInfo info, AlertPolicy policy, DateTimeOffset horizon)
+        (DateTimeOffset Opened, DateTimeOffset? Closed, string Kind) alert, FlightInfo info, AlertPolicy policy, DateTimeOffset horizon,
+        bool canBeCorrected = true)
     {
+        // İndirmeden sonra okuyucu yoksa MISSING yolcuya gösterilmez (BagAlertRules.VisibleToPassenger).
+        if (alert.Kind == BagAlertKind.MissingAtArrival && !canBeCorrected) return null;
         var from = alert.Opened;
         if (alert.Kind == BagAlertKind.NotLoaded)
         {
@@ -98,8 +101,10 @@ public static class AlertEvaluation
 
     private static int Rank(BagState s) => (int)s;
 
-    public static Row Evaluate(IReadOnlyList<FlightResult> flights, AlertPolicy policy, double drop, double corrupt, int seed, string label)
+    public static Row Evaluate(IReadOnlyList<FlightResult> flights, AlertPolicy policy, double drop, double corrupt, int seed, string label,
+        AeroBag.Application.Coverage.ReadCoverage? coverage = null)
     {
+        var canBeCorrected = (coverage ?? AeroBag.Application.Coverage.ReadCoverage.Full).HasReadAfterUnload;
         int bags = 0, nlTruth = 0, nlHit = 0, miTruth = 0, miHit = 0, miEarly = 0, fNl = 0, fMi = 0, fOpen = 0, tPax = 0, fPax = 0;
         var fPaxDur = new List<double>();
         var nlLat = new List<double>();
@@ -118,7 +123,7 @@ public static class AlertEvaluation
                 bags++;
                 var history = Alerts(delivered[b.BagTag], f.Info, policy, horizon);
                 var first = history.Count > 0 ? history[0] : default((DateTimeOffset Opened, DateTimeOffset? Closed, string Kind)?);
-                var paxWindows = history.Select(h => PassengerWindow(h, f.Info, policy, horizon)).OfType<(DateTimeOffset From, DateTimeOffset To)>().ToList();
+                var paxWindows = history.Select(h => PassengerWindow(h, f.Info, policy, horizon, canBeCorrected)).OfType<(DateTimeOffset From, DateTimeOffset To)>().ToList();
                 if (b.Fate is not null && paxWindows.Count > 0 && paxWindows[0].From <= beltEmpty) tPax++;
                 if (b.Fate is null && paxWindows.Count > 0)
                 {

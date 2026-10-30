@@ -28,6 +28,17 @@ public class BagAlertRulesTests
     }
 
     [Fact]
+    public void Missing_at_arrival_is_staff_only_when_no_reader_after_unloading_can_correct_it()
+    {
+        Assert.False(BagAlertRules.VisibleToPassenger(BagAlertKind.MissingAtArrival, BagState.LoadedOnAircraft, Unloaded, Unloaded.AddMinutes(10), P,
+            canBeCorrected: false));
+        Assert.True(BagAlertRules.VisibleToPassenger(BagAlertKind.NotLoaded, BagState.SecurityScreened, Unloaded, Unloaded.AddMinutes(10), P,
+            canBeCorrected: false));
+        Assert.False(AeroBag.Application.Coverage.ReadCoverage.Minimal.HasReadAfterUnload);
+        Assert.True(AeroBag.Application.Coverage.ReadCoverage.Typical.HasReadAfterUnload);
+    }
+
+    [Fact]
     public void Missing_at_arrival_is_shown_to_the_passenger_while_it_applies()
     {
         Assert.True(BagAlertRules.VisibleToPassenger(BagAlertKind.MissingAtArrival, BagState.LoadedOnAircraft, Unloaded, Unloaded.AddMinutes(10), P));

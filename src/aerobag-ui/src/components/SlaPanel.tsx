@@ -62,7 +62,12 @@ export function SlaPanel({ rows }: { rows: FlightSla[] }) {
           <tbody>
             {rows.map((r) => (
               <tr key={r.flightId} className="border-t border-line">
-                <th scope="row" className="px-3 py-3 text-left align-top font-display text-xl font-bold">{r.flightId}</th>
+                <th scope="row" className="px-3 py-3 text-left align-top font-display text-xl font-bold">
+                  {r.flightId}
+                  {r.timesSource === "AODB" && (
+                    <span className="block font-sans text-xs font-normal text-steel">Gerçekleşen zamanlar: yer hizmeti bildirimi (AODB)</span>
+                  )}
+                </th>
                 <Leg leg={r.firstBag} />
                 <Leg leg={r.lastBag} />
               </tr>

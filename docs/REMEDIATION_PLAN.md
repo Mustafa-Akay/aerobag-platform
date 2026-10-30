@@ -142,8 +142,8 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W1 Şema göçü | Tamam (PR birleştirildi) |
 | W2 Saat soyutlaması | Tamam (PR birleştirildi) |
 | W3 Bant numarası | Tamam (PR birleştirildi) |
-| W4 Kayıp bavul tespiti | W4a+W4b birleştirildi; W4c (senaryolar, ölçüm, ölçüme göre düzeltme) test bekliyor (branch `faz6/w4c-alert-eval`) |
-| W5 Okuma kapsamı profilleri | Başlamadı |
+| W4 Kayıp bavul tespiti | Tamam (PR'lar birleştirildi) |
+| W5 Okuma kapsamı profilleri | W5a+W5b yazıldı ve ölçüldü, PR bekliyor (branch `faz6/w5-read-coverage`) |
 | W6 ML sözleşme testi | Başlamadı |
 | W7 Yük testi | Başlamadı |
 | W8 Öncelikli bavul | Başlamadı |

@@ -1,3 +1,4 @@
+using AeroBag.Application.Coverage;
 using AeroBag.Application.Time;
 using Npgsql;
 using NpgsqlTypes;
@@ -16,16 +17,21 @@ public sealed record FlightSummary(
     DateTimeOffset? FirstCarouselUtc,
     DateTimeOffset? LastCarouselUtc,
     double? FirstBagMinutes,
-    int Stalled,
+    int? Stalled,
     int ExitRead,
     int ExitOverdue,
     int ExitReview,
     string? Carousel,
     int OpenAlerts);
 
-public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = null)
+/// <remarks>
+/// Okuma kapsamı (W5): bant ağzı okuması yoksa ilk/son bavul zamanı AODB'nin uçuş düzeyi bildiriminden gelir ve
+/// "takılı" bavul sayılamaz (null: bilinmiyor). "Bantta" sayacı bu kurulumda okumaya dayanmadığı için sıfır kalır.
+/// </remarks>
+public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = null, ReadCoverage? coverage = null)
 {
     private readonly IOperationalClock _now = clock ?? new EventDerivedClock(db);
+    private readonly ReadCoverage _coverage = coverage ?? ReadCoverage.Full;
 
     /// <summary>
     /// Bant ağzına gelmiş bir bagaj bu süreden uzun süredir alınmadıysa "takılı" sayılır.
@@ -60,7 +66,7 @@ public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = n
 
         var stalled = new Dictionary<string, int>();
         var now = await _now.NowAsync(ct);
-        if (now is not null)
+        if (now is not null && _coverage.Has(ReadPoint.Carousel))
         {
             await using (var cmd = db.CreateCommand(
                 """
@@ -100,7 +106,9 @@ public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = n
                    (count(*) FILTER (WHERE current_state = 'EXIT_REVIEW'))::int,
                    (SELECT fc.carousel FROM flight_context fc WHERE fc.flight_id = bags.flight_id),
                    (SELECT count(*) FROM bag_alerts a JOIN bags x ON x.bag_id = a.bag_id
-                     WHERE x.flight_id = bags.flight_id AND a.closed_at_utc IS NULL)::int
+                     WHERE x.flight_id = bags.flight_id AND a.closed_at_utc IS NULL)::int,
+                   (SELECT m.first_bag_on_belt_utc FROM flight_milestones m WHERE m.flight_id = bags.flight_id),
+                   (SELECT m.last_bag_on_belt_utc FROM flight_milestones m WHERE m.flight_id = bags.flight_id)
             FROM bags
             GROUP BY flight_id
             ORDER BY flight_id
@@ -111,12 +119,16 @@ public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = n
             {
                 var id = r.GetString(0);
                 times.TryGetValue(id, out var t);
-                double? firstBagMinutes = t.FirstUnload is { } u && t.FirstCarousel is { } c
+                // Bant okuması yoksa AODB'nin uçuş düzeyi zamanları.
+                var firstBelt = t.FirstCarousel ?? Ts(r, 11);
+                var lastBelt = t.LastCarousel ?? Ts(r, 12);
+                double? firstBagMinutes = t.FirstUnload is { } u && firstBelt is { } c
                     ? Math.Round((c - u).TotalMinutes, 1)
                     : null;
+                int? stalledCount = _coverage.Has(ReadPoint.Carousel) ? stalled.GetValueOrDefault(id) : null;
                 result.Add(new FlightSummary(id, r.GetInt32(1), r.GetInt32(2), r.GetInt32(3), r.GetInt32(4), r.GetInt32(5),
-                    t.Anomalies, t.FirstUnload, t.FirstCarousel, t.LastCarousel, firstBagMinutes,
-                    stalled.GetValueOrDefault(id), r.GetInt32(6), r.GetInt32(7), r.GetInt32(8),
+                    t.Anomalies, t.FirstUnload, firstBelt, lastBelt, firstBagMinutes,
+                    stalledCount, r.GetInt32(6), r.GetInt32(7), r.GetInt32(8),
                     r.IsDBNull(9) ? null : r.GetString(9), r.GetInt32(10)));
             }
         }

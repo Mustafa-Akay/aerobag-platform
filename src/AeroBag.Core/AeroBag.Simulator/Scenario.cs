@@ -6,8 +6,9 @@ namespace AeroBag.Simulator;
 /// Açıkken bazı bavullar aynı rezervasyonu paylaşır (aile); bu yalnızca PNR'ı değiştirir, CSV/ML verisini değiştirmez.</param>
 /// <param name="NotLoadedRate">Uçağa yüklenmeyen bavul oranı (W4 senaryosu, demo varsayımı). Bavulun BSM ve güvenlik okuması olur, sonrası olmaz.</param>
 /// <param name="MissingRate">Yüklenip varışta indirilmeyen bavul oranı (W4 senaryosu, demo varsayımı). Yükleme okumasından sonrası olmaz.</param>
+/// <param name="Coverage">Okuma kapsamı profili (W5): okuyucusu olmayan noktaların mesajları üretilmez. Null: tam kapsam.</param>
 public sealed record SimOptions(int Flights, int BaseBags, int Seed, char Regime, DateTimeOffset StartUtc, bool ExitScans = false, bool GatePackets = false,
-    double NotLoadedRate = 0, double MissingRate = 0);
+    double NotLoadedRate = 0, double MissingRate = 0, AeroBag.Application.Coverage.ReadCoverage? Coverage = null);
 
 /// <summary>Bavulun simülasyondaki akıbeti (W4). Null: normal akış.</summary>
 public static class BagFate
@@ -33,7 +34,9 @@ public sealed record FlightInfo(
     int ArrivalsLast30Min,
     string GroundHandler,
     DateTimeOffset? DepartedUtc = null,
-    DateTimeOffset? UnloadingCompletedUtc = null);
+    DateTimeOffset? UnloadingCompletedUtc = null,
+    DateTimeOffset? FirstBagOnBeltUtc = null,
+    DateTimeOffset? LastBagOnBeltUtc = null);
 
 /// <summary>Simülatörün bildiği gerçek zamanlar (mesajlar kayıp olsa bile bunlar eksiksizdir).</summary>
 public sealed record BagTruth(

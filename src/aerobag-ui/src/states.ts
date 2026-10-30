@@ -39,6 +39,11 @@ export const NOTICE_TEXT: Record<BagNotice, { title: string; body: string }> = {
     title: "Bavul indirme beklenenden geç başladı",
     body: "Uçak park yerinde, bavullar henüz indirilmedi. İndirme başlayınca bu sayfa güncellenir.",
   },
+  // Bant ağzında okuyucu olmayan havalimanlarında, tahmin süresi geçince (W5). Kesin bilgi değil, olasılık.
+  LIKELY_ON_BELT: {
+    title: "Bavulunuz büyük olasılıkla bantta",
+    body: "Bu havalimanında bant başında okuma yapılmıyor; tahmini süre geçti. Bavulunuzu bantta göremezseniz bagaj hizmetlerine başvurun.",
+  },
 };
 
 /** Uyarı varsa bant numarası gösterilmez: yolcuyu bant başında bekletmemek için (iki uyarı da varışta gösterilir). */

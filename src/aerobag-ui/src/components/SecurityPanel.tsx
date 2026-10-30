@@ -6,6 +6,7 @@ const REASON: Record<string, string> = {
   PNR_MISMATCH: "Sunulan rezervasyon bavulla eşleşmedi",
   UNKNOWN_TAG: "Etiket sistemde yok",
   NOT_ON_CAROUSEL: "Bavul banda gelmeden çıkışta okundu",
+  NOT_ARRIVED: "Bavul varışta okunmadan çıkışta okundu",
 };
 
 const POLL_MS = 5000;

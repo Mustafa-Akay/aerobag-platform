@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using AeroBag.Api;
 using AeroBag.Application.Alerts;
+using AeroBag.Application.Coverage;
 using AeroBag.Application.Ml;
 using AeroBag.Application.Time;
 using AeroBag.Application.TypeB;
@@ -41,6 +42,18 @@ builder.Services.AddSingleton<IOperationalClock>(sp => clockMode == ClockModes.R
     ? new SystemOperationalClock(sp.GetRequiredService<TimeProvider>())
     : new EventDerivedClock(sp.GetRequiredService<NpgsqlDataSource>()));
 builder.Services.AddSingleton(new LookupKeyHasher(Encoding.UTF8.GetBytes(lookupSecret)));
+
+// Okuma kapsamı (Faz 6, W5): hangi noktalarda okuyucu var. full | typical | minimal. Geçersiz değerde API açılmaz.
+ReadCoverage coverage;
+try
+{
+    coverage = ReadCoverage.Parse(builder.Configuration["Coverage:Profile"]);
+}
+catch (ArgumentException ex)
+{
+    throw new InvalidOperationException(ex.Message, ex);
+}
+builder.Services.AddSingleton(coverage);
 builder.Services.AddSingleton<BaggageEventProcessor>();
 builder.Services.AddSingleton<BagQueries>();
 builder.Services.AddSingleton<EtaStatistics>();
@@ -88,7 +101,14 @@ builder.Services.AddSingleton<ExitDeadlineService>();
 builder.Services.AddHostedService<ExitDeadlineBackgroundService>();
 
 // KVKK (Faz 4): teslimden belirli bir süre sonra yolcunun arama özetleri geri dönülmez şekilde değiştirilir.
-builder.Services.AddSingleton(new RetentionOptions(builder.Configuration.GetValue("Retention:PersonalDataDays", 30)));
+var retention = new RetentionOptions(
+    builder.Configuration.GetValue("Retention:PersonalDataDays", 30),
+    builder.Configuration.GetValue("Retention:UndeliveredDays", 90));
+if (retention.PersonalDataDays < 1 || retention.UndeliveredDays < retention.PersonalDataDays)
+{
+    throw new InvalidOperationException("Retention:PersonalDataDays en az 1, Retention:UndeliveredDays en az PersonalDataDays olmalı.");
+}
+builder.Services.AddSingleton(retention);
 builder.Services.AddSingleton<RetentionService>();
 builder.Services.AddHostedService<RetentionBackgroundService>();
 
@@ -201,6 +221,7 @@ if (ingest.UsingDemoSource)
 {
     app.Logger.LogWarning("Ingest:Sources verilmedi; demo kaynağı (simulator) etkin. Yalnızca yerel demo içindir.");
 }
+app.Logger.LogInformation("Okuma kapsamı: {Profile} ({Points}).", coverage.Name, string.Join(", ", coverage.Points));
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -311,7 +332,15 @@ app.MapPost("/v1/flights/milestones", async (FlightMilestones body, FlightMilest
         return Results.BadRequest(new { error });
     }
 
-    await store.UpsertAsync(body, ct);
+    try
+    {
+        await store.UpsertAsync(body, ct);
+    }
+    catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.CheckViolation)
+    {
+        // Kayıtlı değerle birleşince sıra bozuluyor (ör. son bavul, önceden bildirilen ilk bavuldan önce).
+        return Results.BadRequest(new { error = "zamanlar kayıtlı değerlerle tutarsız." });
+    }
     return Results.Accepted();
 }).WithMetadata(new RequireSourceScope(IngestScopes.Context));
 

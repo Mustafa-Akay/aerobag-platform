@@ -59,7 +59,7 @@ public class AlertEvaluationTests
         var info = Run(0, 0, flights: 1)[0].Info;
         var ms = ContextSender.Milestones(info).ToList();
 
-        Assert.Equal(2, ms.Count);
+        Assert.Equal(4, ms.Count); // kalkış, indirme bitti, ilk ve son bavul bantta (W5)
         Assert.All(ms, m => Assert.Equal("MILESTONE", m.Kind));
         Assert.Equal(info.DepartedUtc, ms[0].TimeUtc);
         Assert.Equal(info.UnloadingCompletedUtc, ms[1].TimeUtc);
@@ -90,6 +90,16 @@ public class AlertEvaluationTests
         Assert.True(row.FalseNotLoaded > 0);
         Assert.True(row.FalsePassenger * 3 < row.FalseNotLoaded + row.FalseMissing,
             $"yolcu {row.FalsePassenger}, personel {row.FalseNotLoaded + row.FalseMissing}");
+    }
+
+    [Fact]
+    public void With_minimal_coverage_lost_unload_reads_do_not_reach_passengers_as_false_missing_alerts()
+    {
+        var flights = SimulationRunner.Run(new SimOptions(40, 120, 11, 'M', Start, Coverage: AeroBag.Application.Coverage.ReadCoverage.Minimal));
+        var row = AlertEvaluation.Evaluate(flights, AlertPolicy.Default, 0.02, 0, 1, "kayıplı", AeroBag.Application.Coverage.ReadCoverage.Minimal);
+
+        Assert.True(row.FalseMissing > 0, "kaybolan indirme okuması personel ekranında MISSING üretmeli");
+        Assert.True(row.FalsePassenger * 500 <= row.Bags, $"yolcuya giden yanlış uyarı {row.FalsePassenger}/{row.Bags}");
     }
 
     [Fact]

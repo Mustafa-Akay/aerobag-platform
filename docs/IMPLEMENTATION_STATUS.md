@@ -297,3 +297,70 @@ Bilinen sınırlar:
   - okuma kaybı yanlış uyarı üretiyor ve çoğu sonraki okumayla kapanıyor;
   - aynı tohum aynı ölçümü veriyor;
   - uyarı geçmişi tolerans sınırında açılıp sonraki okumada kapanıyor.
+
+## Faz 6, W5 (ilk dilim): okuma kapsamı profilleri
+
+- **Sorun:** sistem her noktada (güvenlik, yükleme, indirme, şut, bant ağzı, banttan alma) okuyucu olduğunu varsayıyordu. Çoğu havalimanında bant ağzında ve banttan almada okuyucu yoktur. Bu varsayım bozulunca şunlar oluyordu:
+  - her bavul "sıra dışı" sayılırdı;
+  - ExitGuard her bavulda "banda gelmeden çıkışta okundu" yanlış alarmı verirdi;
+  - SLA'da son bavul hiç gerçekleşmezdi;
+  - yolcu tahmin süresi geçtikten sonra da "1 dakikadan az" görürdü;
+  - teslim durumuna ulaşmayan bavulların yolcularının arama özetleri **hiç silinmezdi** (KVKK).
+- **Model:** `Application/Coverage/ReadCoverage`. Okuyucu yerleşimi altyapının bir özelliğidir; uçuştan uçuşa tahmin edilmez, yapılandırmayla verilir (`Coverage:Profile`, geçersiz değerde API açılmaz). Profiller:
+  - `full`: her noktada okuyucu (varsayılan, simülatörün eski davranışı);
+  - `typical`: güvenlik, yükleme, indirme ve şut; bant ağzı ve banttan alma yok;
+  - `minimal`: yalnızca yükleme ve indirme (BSM her zaman vardır).
+- **Kapsamaya uyan davranışlar:**
+  - **Sıra dışı:** atlanan adım yalnızca o noktada okuyucu varsa ANOMALY sayılır. Durum işlemcisi ve çıkış kapısı aynı kuralı kullanır.
+  - **ExitGuard:** "sıra dışı çıkış" eşiği, çıkıştan önce okunabilen en ileri varış durumudur (bant ağzı, yoksa şut, yoksa indirme). Bant ağzı olmayan kurulumda gerekçe `NOT_ARRIVED` olur.
+  - **SLA:** gerçekleşen ilk ve son bavul, bant okumaları yoksa yer hizmetinin AODB'ye bildirdiği uçuş düzeyi zamanlardan gelir. Göç `0004_belt_milestones` `flight_milestones`'a `first_bag_on_belt_utc` ve `last_bag_on_belt_utc` ekler. Kaynak yanıtta yazar (`timesSource`: READS, AODB, NONE); panoda AODB ise not düşülür. AODB "son bavul bantta" dediyse kayıp bavul son bavulu bekletmez.
+  - **Operasyon panosu:** ilk/son bavul zamanı AODB'den gelir. Bant okuması yoksa "takılı" bavul sayılamaz (`null`, bilinmiyor).
+  - **Yolcu kartı:** bant ağzı okuyucusu yoksa ve tahmin aralığı geçtiyse "Bavulunuz büyük olasılıkla bantta" (`LIKELY_ON_BELT`) gösterilir. Bu türetilmiş bir bilgidir, durum değişmez. Tam kapsamda gösterilmez, çünkü orada bant okuması gelecektir.
+  - **Çıkış süresi:** banttan alma okumasıyla başladığı için o okuma yoksa hiç başlamaz. Çıkış bilgisi yalnızca ExitGuard kapı okumasıdır.
+  - **Saklama süresi (KVKK):** teslim durumuna hiç ulaşmayan bavulların yolcuları için son güncellemeden 90 gün üst sınır (`Retention:UndeliveredDays`).
+- **Simülatör:**
+  - `--coverage full|typical|minimal`: okuyucusu olmayan noktanın mesajı hiç üretilmez, gerçek zamanlar değişmez.
+  - Yer hizmetinin ilk/son bavul bantta bildirimi, kilometre taşı olarak olay anında gönderilir.
+  - Canlı modda API'nin de aynı profille açılması gerektiği hatırlatılır.
+- **Bilinen sınırlar:**
+  - Bant ağzı okuması olmayan kurulumda bavul düzeyi ML geri bildirimi ve ampirik ETA istatistiği çalışmaz (bant zamanı yok). ETA, indirme sonrası ML ya da varsayılan aralığa ve şutta fiziğe dayanır.
+  - Uçuş düzeyi ML geri bildirimi AODB zamanlarını henüz kullanmıyor.
+  - Panodaki "Bantta" sayacı bu kurulumda sıfır kalır.
+- **Testler:**
+  - **Birim:**
+    - profil ayrıştırma;
+    - sıra dışı kuralı;
+    - en ileri varış durumu;
+    - ExitGuard'ın şuttaki bavula karar vermesi;
+    - simülatörün profil başına yalnızca kapsamdaki okumaları üretmesi;
+    - kapsamın gerçek zamanları değiştirmemesi;
+    - bant kilometre taşları ve doğrulaması.
+  - **Entegrasyon:**
+    - okuyucusu olmayan noktanın atlanması APPLIED, olanınki ANOMALY;
+    - tipik kapsamlı API'de çıkış kapısı şuttaki bavulu sıra dışı saymadan geçiriyor;
+    - SLA ve pano AODB zamanlarına düşüyor, "takılı" bilinmiyor;
+    - veri yokken kaynak NONE;
+    - yolcu, aralık geçince "büyük olasılıkla bantta" görüyor (tam kapsamda görmüyor);
+    - tutarsız bant zamanı 400 alıyor;
+    - teslim edilmeyen bavulun yolcusu 90 gün sonra anonimleşiyor.
+
+## Faz 6, W5b: okuma kapsamına duyarlılık ölçümü
+
+- **Ölçüm:** `--mode coverage-eval` (varsayılan 200 uçuş). Aynı gerçek zaman çizelgesi `full`, `typical` ve `minimal` profillerinde görülür. Kurallar API'dekilerle aynıdır: durum makinesi, kapsamaya göre sıra dışı, fizik penceresi, varsayılan ETA aralığı ve SLA'nın AODB'ye düşmesi. Raporladıkları:
+  - bavul banda geldikten sonra yolcuya "bantta / büyük olasılıkla bantta" denene kadar geçen süre;
+  - bavul gelmeden söylenen ve hiç söylenmeyen bilgi;
+  - SLA'da ilk/son bavulun kaynağı (okuma ya da AODB) ve sapması;
+  - kapsamı bilen ve bilmeyen kurala göre "sıra dışı" sayısı.
+- **Kayıp bavul uyarısı:** `--mode alert-eval --coverage typical|minimal`.
+- **Sonuçlar** (`EVALUATION.md`, "Okuma kapsamına duyarlılık"):
+  - **`typical`:** yolcu bavul banda geldikten ~18 sn sonra bilgilendiriliyor; SLA 200 uçuşun hepsinde AODB'den; kayıp bavul uyarısı `full` ile aynı.
+  - **`minimal`:** yolcu ~8 dk geç öğreniyor; indirme okuması kaybolanlara hiçbir şey söylenemiyor.
+  - **"Sıra dışı":** kapsamı bilmeyen kural `typical`'da 1000 bavulda 1058, `minimal`'de 2000 sayardı.
+- **Ölçüme göre değişen:** indirmeden sonra ikinci bir okuyucusu olmayan kurulumda (`ReadCoverage.HasReadAfterUnload` yanlış) MISSING_AT_ARRIVAL yalnızca personele gösteriliyor. Ölçümde `minimal` profilde yolcuya giden MISSING uyarılarının ~9'da 8'i kaybolan indirme okumasından doğan, hiç kapanmayan yanlış uyarıydı.
+- **Testler:**
+  - tam kapsamda kayıpsız gecikme sıfır;
+  - tipik kapsamda bilgi fizik payı içinde ve SLA AODB'den;
+  - kapsamı bilmek yanlış "sıra dışı"ları kaldırıyor, okuyucusu olan noktadaki kayıp hâlâ sayılıyor;
+  - en az kapsamda varsayılan aralık;
+  - en az kapsamda kaybolan indirme okuması yolcuya yanlış MISSING olarak ulaşmıyor;
+  - kural düzeyinde MISSING'in yalnızca personele gösterilmesi.

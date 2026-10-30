@@ -1,0 +1,10 @@
+{
+  "basis": "ML",
+  "adapted": false,
+  "adaptation_samples": 0,
+  "minutes_from_on_block": {
+    "first_min": { "p10": 9.8, "p50": 12.6, "p90": 17.9 },
+    "span_min": { "p10": 4.1, "p50": 7.2, "p90": 12.4 },
+    "last_min": { "p10": 15.7, "p50": 20.3, "p90": 28.1 }
+  }
+}

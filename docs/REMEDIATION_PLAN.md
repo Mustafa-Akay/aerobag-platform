@@ -101,6 +101,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 #### W6. ML sözleşme testi (B6)
 - **Mimari:** `contracts/ml/` altında örnek istek ve yanıt JSON'ları. Python testi, servisin gerçek yanıtının bu örneklerle aynı alanları ve tipleri taşıdığını doğrular. .NET testi, `MlHttpPredictor`'ı sahte bir HTTP işleyiciyle aynı dosyalardan besler (bugün bu sınıfın hiç testi yok).
 - **Bitti ölçütü:** Python'da bir alan adı değişirse iki taraftan biri kırmızıya döner.
+- **Yapılan (30 Ekim):** sözleşme dosyaları `contracts/ml/`; Python ve .NET sözleşme testleri; `MlStatus`, hata logu, `GET /v1/ml/status` ve operasyon panosunda durum satırı; `Ml:TimeoutSeconds`.
 - **Görünürlük (W3 canlı denemesinden, 28 Ekim):** ML servisi `200` dönerken yolcu sorgusu indirme aşamasında `HISTORY`'ye düştü. En olası neden 2 sn zaman aşımı ve ardından 15 sn bekleme, ama `MlHttpPredictor` hataları hiçbir yere yazmadığı için doğrulanamadı. Hatalar ve bekleme başlangıcı uyarı olarak loglanır (servis adresi ve süre ile, kişisel veri olmadan); operasyon panosunda "ML erişilemedi" sayacı ve son hata zamanı gösterilir; zaman aşımı yapılandırılabilir olur.
 
 #### W7. Yük testi (B7)
@@ -143,8 +144,8 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W2 Saat soyutlaması | Tamam (PR birleştirildi) |
 | W3 Bant numarası | Tamam (PR birleştirildi) |
 | W4 Kayıp bavul tespiti | Tamam (PR'lar birleştirildi) |
-| W5 Okuma kapsamı profilleri | W5a+W5b yazıldı ve ölçüldü, PR bekliyor (branch `faz6/w5-read-coverage`) |
-| W6 ML sözleşme testi | Başlamadı |
+| W5 Okuma kapsamı profilleri | Tamam (PR birleştirildi) |
+| W6 ML sözleşme testi | Yazıldı, test bekliyor (branch `faz6/w6-ml-contract`) |
 | W7 Yük testi | Başlamadı |
 | W8 Öncelikli bavul | Başlamadı |
 | W9 İngilizce arayüz | Başlamadı |

@@ -59,6 +59,22 @@ export type OpenAlert = {
   openedAtUtc: string;
 };
 
+/** ML servisinin durumu (W6). */
+export type MlStatus = {
+  enabled: boolean;
+  healthy: boolean;
+  requests: number;
+  failures: number;
+  lastSuccessUtc: string | null;
+  lastFailureUtc: string | null;
+  lastFailureReason: string | null;
+  backoffUntilUtc: string | null;
+};
+
+export function getMlStatus(token: string, signal?: AbortSignal): Promise<MlStatus> {
+  return getJson<MlStatus>("/v1/ml/status", signal, token);
+}
+
 export function getAlerts(token: string, signal?: AbortSignal): Promise<OpenAlert[]> {
   return getJson<OpenAlert[]>("/v1/alerts", signal, token);
 }

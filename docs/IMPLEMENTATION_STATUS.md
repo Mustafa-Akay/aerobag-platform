@@ -364,3 +364,34 @@ Bilinen sınırlar:
   - en az kapsamda varsayılan aralık;
   - en az kapsamda kaybolan indirme okuması yolcuya yanlış MISSING olarak ulaşmıyor;
   - kural düzeyinde MISSING'in yalnızca personele gösterilmesi.
+
+## Faz 6, W6: ML sözleşme testi ve görünürlük
+
+- **Sorun:** API ile Python ML servisi arasındaki istek ve yanıt biçimi iki ayrı kod tabanında, elle tutarlı tutuluyordu. Python'da bir alan adı değişirse .NET tarafı sessizce taban çizgisine düşerdi. `MlHttpPredictor`'ın hiç testi yoktu. 28 Ekim canlı denemesinde tahmin indirme aşamasında HISTORY'ye düştü; neden düştüğü hiçbir yerde görünmüyordu.
+- **Sözleşme:** `contracts/ml/` altında her uç için örnek istek ve yanıt (`predict`, `predict-bag`, `outcome`, `outcome-bags`, `health`). Sözleşme alan adları ve JSON tipleridir, değerler değildir.
+  - **Python** (`ml/tests/test_contract.py`): her örnek istek servise gönderilir; servis kabul etmeli ve yanıtı örnekle aynı biçimde vermeli. Her sözleşme dosyasının kullanıldığı da denetlenir.
+  - **.NET** (`MlContractTests`): `MlHttpPredictor` sahte bir HTTP işleyiciye karşı çalışır; gönderdiği istek örnekle aynı biçimde olmalı ve örnek yanıtı doğru okumalı.
+  - Bir alan değişirse iki taraftan biri kırmızıya döner.
+- **Görünürlük:**
+  - `MlStatus` her çağrının sonucunu tutar: istek ve hata sayısı, son başarı ve son hata zamanı, gerekçe (HTTP kodu, zaman aşımı, bağlantı hatası, sözleşmeye uymayan yanıt) ve bekleme süresinin bitişi.
+  - Hata durumuna geçildiği an (her denemede değil) uyarı loglanır; servis toparlanınca bilgi logu yazılır.
+  - `GET /v1/ml/status` (personel). Operasyon panosunda bir durum satırı: "ML servisi yanıt veriyor", ya da gerekçe ve son hata zamanıyla "ML servisi yanıt vermiyor".
+  - Zaman aşımı yapılandırılabilir: `Ml:TimeoutSeconds`, varsayılan 2 sn.
+- **Bilinen sınır:** durum, API'nin son ML çağrısının sonucudur; servis ayrıca yoklanmaz. Trafik yokken (ör. simülasyon bitmişken) servis kapansa da satır "yanıt veriyor" kalır. Periyodik `/health` yoklaması sonraki bir iştir.
+- **Davranış değişiklikleri:**
+  - Geri bildirim isteklerinin (sonuç bildirimi) hatası da kaydedilir ama tahminleri bekletmez.
+  - İstek iptal edilirse (uygulama kapanırken) hata sayılmaz.
+- **Testler:**
+  - **.NET:**
+    - dört uç sözleşmeye uyuyor;
+    - sunucu hatasında bekleme süresi, gerekçe ve toparlanma;
+    - zaman aşımı gerekçesi;
+    - sözleşmeye uymayan yanıta güvenilmiyor;
+    - kısa kesintide son uçuş tahmini kullanılıyor;
+    - geri bildirim hatası tahminleri bekletmiyor;
+    - sözleşme dosyalarının hepsi mevcut;
+    - `/v1/ml/status` yetkisi.
+  - **Python:**
+    - dört uç ve `/health` sözleşmeye uyuyor;
+    - her sözleşme dosyası kullanılıyor;
+    - biçim karşılaştırması tam sayı ile ondalığı aynı, mantıksalı farklı sayıyor.

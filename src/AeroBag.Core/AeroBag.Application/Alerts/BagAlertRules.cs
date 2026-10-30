@@ -30,6 +30,12 @@ public static class BagAlertCloseReason
 public static class BagNotice
 {
     public const string ArrivalDelayed = "ARRIVAL_DELAYED";
+
+    /// <summary>
+    /// Bant ağzında okuyucu yok ve tahmin aralığı geçti: bavul büyük olasılıkla bantta (W5). Türetilmiş bilgidir; durum
+    /// değişmez, yanlış bir "1 dakikadan az" göstermek yerine söylenir.
+    /// </summary>
+    public const string LikelyOnBelt = "LIKELY_ON_BELT";
 }
 
 /// <summary>
@@ -43,14 +49,22 @@ public sealed record AlertPolicy(TimeSpan NotLoadedGrace, TimeSpan MissingGrace)
     public static readonly AlertPolicy Default = new(TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(5));
 }
 
-/// <summary>AODB kilometre taşları. Alanlardan en az biri verilir; verilmeyen alan kayıtlı değeri korur.</summary>
-public sealed record FlightMilestones(string FlightId, DateTimeOffset? DepartedUtc = null, DateTimeOffset? UnloadingCompletedUtc = null)
+/// <summary>
+/// AODB kilometre taşları. Alanlardan en az biri verilir; verilmeyen alan kayıtlı değeri korur.
+/// İlk/son bavulun banda geliş zamanı (W5) yer hizmetinin uçuş düzeyinde bildirdiği değerdir; bant ağzında okuyucu
+/// olmayan kurulumlarda SLA bunlardan hesaplanır.
+/// </summary>
+public sealed record FlightMilestones(string FlightId, DateTimeOffset? DepartedUtc = null, DateTimeOffset? UnloadingCompletedUtc = null,
+    DateTimeOffset? FirstBagOnBeltUtc = null, DateTimeOffset? LastBagOnBeltUtc = null)
 {
     public string? Validate()
     {
         if (!Regex.IsMatch(FlightId ?? "", @"^[A-Z0-9\-]{1,40}\z")) return "flightId geçersiz.";
-        if (DepartedUtc is null && UnloadingCompletedUtc is null) return "departedUtc ya da unloadingCompletedUtc verilmeli.";
+        if (DepartedUtc is null && UnloadingCompletedUtc is null && FirstBagOnBeltUtc is null && LastBagOnBeltUtc is null)
+            return "en az bir zaman verilmeli (departedUtc, unloadingCompletedUtc, firstBagOnBeltUtc, lastBagOnBeltUtc).";
         if (DepartedUtc is { } d && UnloadingCompletedUtc is { } u && u <= d) return "unloadingCompletedUtc kalkıştan sonra olmalı.";
+        if (FirstBagOnBeltUtc is { } f && LastBagOnBeltUtc is { } l && l < f) return "lastBagOnBeltUtc ilk bavuldan önce olamaz.";
+        if (DepartedUtc is { } d2 && FirstBagOnBeltUtc is { } f2 && f2 <= d2) return "firstBagOnBeltUtc kalkıştan sonra olmalı.";
         return null;
     }
 }
@@ -115,9 +129,15 @@ public static class BagAlertRules
     /// yükleme okumasından doğan yanlış uyarıydı ve varışa kadar (~3,5 saat) açık kalıyordu. Bu uyarıyı personel kalkıştan
     /// sonra görür (bavulu sonraki uçağa yönlendirmek onların elindedir); yolcu, kanıt güçlendiğinde, bant boşalmadan öğrenir.
     /// </summary>
+    /// <param name="canBeCorrected">
+    /// İndirmeden sonra bavulu okuyan ikinci bir nokta var mı (<c>ReadCoverage.HasReadAfterUnload</c>). Yoksa MISSING_AT_ARRIVAL
+    /// yalnızca personele gösterilir: W5 ölçümünde en az kapsamda yolcuya giden MISSING uyarılarının ~9'da 8'i kaybolan indirme
+    /// okumasından doğan, hiç kapanmayan yanlış uyarıydı.
+    /// </param>
     public static bool VisibleToPassenger(string kind, BagState state, DateTimeOffset? unloadingCompletedUtc,
-        DateTimeOffset now, AlertPolicy policy) =>
+        DateTimeOffset now, AlertPolicy policy, bool canBeCorrected = true) =>
         StillApplies(kind, state)
+        && (kind != BagAlertKind.MissingAtArrival || canBeCorrected)
         && (kind != BagAlertKind.NotLoaded
             || (unloadingCompletedUtc is { } u && now >= u + policy.MissingGrace));
 

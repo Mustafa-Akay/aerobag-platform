@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AeroBag.Application.Coverage;
 using AeroBag.Application.TypeB;
 using AeroBag.Domain;
 using Npgsql;
@@ -12,8 +13,14 @@ namespace AeroBag.Infrastructure;
 /// Ayrıştırılamayan mesaj ölü mektup tablosuna gider. Aynı bavul için işlemler
 /// advisory lock ile sıraya dizilir; aynı idempotency_key ikinci kez işlenmez.
 /// </summary>
-public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider clock, LookupKeyHasher hasher)
+/// <remarks>
+/// Okuma kapsamı (W5): atlanan bir adım yalnızca o noktada okuyucu varsa "sıra dışı" (ANOMALY) sayılır. Bant ağzında
+/// okuyucu olmayan bir kurulumda şuttan çıkışa geçmek beklenen akıştır.
+/// </remarks>
+public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider clock, LookupKeyHasher hasher, ReadCoverage? coverage = null)
 {
+    private readonly ReadCoverage _coverage = coverage ?? ReadCoverage.Full;
+
     public static readonly TimeSpan ExitDeadline = TimeSpan.FromSeconds(180);
 
     public async Task<ProcessResult> ProcessAsync(string? rawText, string source, CancellationToken ct = default)
@@ -116,7 +123,7 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
         var outcome = transition.Outcome switch
         {
             TransitionOutcome.Applied => "APPLIED",
-            TransitionOutcome.AppliedWithAnomaly => "ANOMALY",
+            TransitionOutcome.AppliedWithAnomaly => _coverage.IsAnomaly(transition.SkippedStates) ? "ANOMALY" : "APPLIED",
             _ => "IGNORED_STALE",
         };
         var newState = transition.NewState;

@@ -1,4 +1,5 @@
 using AeroBag.Application.Alerts;
+using AeroBag.Application.Coverage;
 using AeroBag.Application.Eta;
 using AeroBag.Application.Ml;
 using AeroBag.Application.Time;
@@ -28,10 +29,11 @@ public sealed record LookupResult(DateTimeOffset AsOfUtc, IReadOnlyList<Passenge
 public sealed class PassengerQueries(
     NpgsqlDataSource db, LookupKeyHasher hasher, EtaStatistics stats, TimeProvider clock,
     IMlPredictor? ml = null, FlightContextStore? contexts = null, IOperationalClock? operationalClock = null,
-    AlertPolicy? alertPolicy = null)
+    AlertPolicy? alertPolicy = null, ReadCoverage? coverage = null)
 {
     private readonly IOperationalClock _now = operationalClock ?? new EventDerivedClock(db);
     private readonly AlertPolicy _policy = alertPolicy ?? AlertPolicy.Default;
+    private readonly ReadCoverage _coverage = coverage ?? ReadCoverage.Full;
 
     private record Row(string Tag, string Flight, string State, DateTimeOffset? LastEvent, string? Carousel,
         string? OpenAlert, DateTimeOffset? OnBlock, int FirstBagTargetSec, bool AnyBagUnloaded, DateTimeOffset? UnloadingCompleted);
@@ -155,7 +157,8 @@ public sealed class PassengerQueries(
             // çalıştığı için bavul bu arada okunduysa eski uyarı gösterilmez. NOT_LOADED yolcuya ancak varışta gösterilir
             // (VisibleToPassenger; personel kalkıştan sonra görür).
             string? notice = null;
-            if (row.OpenAlert is { } alert && BagAlertRules.VisibleToPassenger(alert, state, row.UnloadingCompleted, asOf, _policy))
+            if (row.OpenAlert is { } alert && BagAlertRules.VisibleToPassenger(alert, state, row.UnloadingCompleted, asOf, _policy,
+                    _coverage.HasReadAfterUnload))
             {
                 notice = alert;
                 window = null;
@@ -163,6 +166,14 @@ public sealed class PassengerQueries(
             else if (BagAlertRules.IsArrivalDelayed(state, row.OnBlock, row.AnyBagUnloaded, row.FirstBagTargetSec, asOf))
             {
                 notice = BagNotice.ArrivalDelayed;
+            }
+            else if (!_coverage.Has(ReadPoint.Carousel)
+                     && state is BagState.UnloadedAtArrival or BagState.InboundChute
+                     && window is not null && asOf >= window.P90Utc)
+            {
+                // Bant ağzı okuması bu kurulumda hiç gelmeyecek: aralık geçince "büyük olasılıkla bantta" (W5).
+                notice = BagNotice.LikelyOnBelt;
+                window = null;
             }
             return new PassengerBagView(row.Tag, row.Flight, row.State, window is null ? null : ToView(window, asOf), row.Carousel, notice);
         }).ToList();

@@ -39,15 +39,20 @@ public static class ExitGuardRules
 {
     public const double DefaultMinSignalQuality = 0.6;
 
-    public static GateVerdict Decide(BagState current, byte[]? ownerPnrKey, byte[]? presentedPnrKey, double? signalQuality, double minSignalQuality)
+    /// <param name="lastArrivalState">
+    /// Çıkıştan önce okunabilen en ileri varış durumu (okuma kapsamı, W5). Bavul bundan geride okunursa sıra dışıdır.
+    /// Varsayılan bant ağzıdır; bant ağzında okuyucu yoksa şut ya da indirme verilir, yoksa her bavul yanlış alarm olur.
+    /// </param>
+    public static GateVerdict Decide(BagState current, byte[]? ownerPnrKey, byte[]? presentedPnrKey, double? signalQuality, double minSignalQuality,
+        BagState lastArrivalState = BagState.OnCarousel)
     {
         if (current is BagState.ExitCleared or BagState.ExitReview or BagState.OffloadedNoShow)
         {
             return new GateVerdict(GateDecision.AlreadyClosed, "CLOSED");
         }
-        if (current < BagState.OnCarousel)
+        if (current < lastArrivalState)
         {
-            return new GateVerdict(GateDecision.OutOfSequence, "NOT_ON_CAROUSEL");
+            return new GateVerdict(GateDecision.OutOfSequence, lastArrivalState == BagState.OnCarousel ? "NOT_ON_CAROUSEL" : "NOT_ARRIVED");
         }
         if (presentedPnrKey is null)
         {

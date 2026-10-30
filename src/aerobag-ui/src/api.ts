@@ -19,7 +19,7 @@ export type PassengerBag = {
   notice: BagNotice | null;
 };
 
-export type BagNotice = "NOT_LOADED" | "MISSING_AT_ARRIVAL" | "ARRIVAL_DELAYED";
+export type BagNotice = "NOT_LOADED" | "MISSING_AT_ARRIVAL" | "ARRIVAL_DELAYED" | "LIKELY_ON_BELT";
 
 export type LookupResult = {
   asOfUtc: string;
@@ -84,6 +84,8 @@ export type FlightSla = {
   allBagsArrived: boolean;
   firstBag: SlaLeg;
   lastBag: SlaLeg;
+  /** Gerçekleşen zamanların kaynağı: bant okumaları, AODB'nin uçuş düzeyi bildirimi ya da henüz yok (W5). */
+  timesSource: "READS" | "AODB" | "NONE";
 };
 
 export class ApiError extends Error {
@@ -142,7 +144,7 @@ export type ExitReview = {
   bagTag: string;
   flightId: string | null;
   gateId: string;
-  reason: "PNR_MISMATCH" | "UNKNOWN_TAG" | "NOT_ON_CAROUSEL" | string;
+  reason: "PNR_MISMATCH" | "UNKNOWN_TAG" | "NOT_ON_CAROUSEL" | "NOT_ARRIVED" | string;
   occurredAtUtc: string;
   status: "OPEN" | "RESOLVED";
   resolution: "CONFIRMED" | "FALSE_ALARM" | null;

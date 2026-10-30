@@ -57,5 +57,14 @@ public static class ContextSender
         {
             yield return new ScheduledMessage(u, JsonSerializer.Serialize(new { flightId = f.FlightId, unloadingCompletedUtc = u }, Json), "", "MILESTONE");
         }
+        // Yer hizmetinin uçuş düzeyinde bildirdiği ilk/son bavul bantta zamanları (W5); bant okuması yoksa SLA bunlardan.
+        if (f.FirstBagOnBeltUtc is { } fb)
+        {
+            yield return new ScheduledMessage(fb, JsonSerializer.Serialize(new { flightId = f.FlightId, firstBagOnBeltUtc = fb }, Json), "", "MILESTONE");
+        }
+        if (f.LastBagOnBeltUtc is { } lb)
+        {
+            yield return new ScheduledMessage(lb, JsonSerializer.Serialize(new { flightId = f.FlightId, lastBagOnBeltUtc = lb }, Json), "", "MILESTONE");
+        }
     }
 }

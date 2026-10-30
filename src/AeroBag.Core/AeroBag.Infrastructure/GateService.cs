@@ -19,10 +19,13 @@ public sealed record GateTagResult(string BagTag, string Decision, string? State
 /// Her okuma <c>gate_reads</c>'e (denetim izi) yazılır; durum değiştiren kararlar ayrıca olay günlüğüne ve outbox'a,
 /// uyuşmazlık ve sıra dışı okumalar inceleme kaydına (<c>exit_reviews</c>) yazılır. Aynı paket ikinci kez gelirse DUPLICATE.
 /// </summary>
-public sealed class GateService(NpgsqlDataSource db, LookupKeyHasher hasher, ExitGuardOptions options)
+public sealed class GateService(NpgsqlDataSource db, LookupKeyHasher hasher, ExitGuardOptions options,
+    AeroBag.Application.Coverage.ReadCoverage? coverage = null)
 {
     public const string UnknownTag = "UNKNOWN_TAG";
     public const string Duplicate = "DUPLICATE";
+
+    private readonly AeroBag.Application.Coverage.ReadCoverage _coverage = coverage ?? AeroBag.Application.Coverage.ReadCoverage.Full;
 
     public async Task<IReadOnlyList<GateTagResult>> ProcessAsync(GateScan scan, string source, CancellationToken ct = default)
     {
@@ -98,7 +101,8 @@ public sealed class GateService(NpgsqlDataSource db, LookupKeyHasher hasher, Exi
             ownerKey = r.IsDBNull(1) ? null : r.GetFieldValue<byte[]>(1);
         }
 
-        var verdict = ExitGuardRules.Decide(current, ownerKey, presented, scan.SignalQuality, options.MinSignalQuality);
+        var verdict = ExitGuardRules.Decide(current, ownerKey, presented, scan.SignalQuality, options.MinSignalQuality,
+            _coverage.LastArrivalState);
         var gateReadId = await InsertReadAsync(conn, tx, ik, scan, tag, bagId, verdict.Code, verdict.Reason, source, ct)
             ?? throw new InvalidOperationException("Kapı okuması yazılamadı.");
 
@@ -110,7 +114,7 @@ public sealed class GateService(NpgsqlDataSource db, LookupKeyHasher hasher, Exi
             if (transition.Outcome != TransitionOutcome.IgnoredStale)
             {
                 finalState = transition.NewState;
-                await ApplyAsync(conn, tx, bagId.Value, tag, flightId!, current, transition, verdict, gateReadId, scan, source, now, ct);
+                await ApplyAsync(conn, tx, bagId.Value, tag, flightId!, current, transition, verdict, gateReadId, scan, source, now, _coverage, ct);
             }
         }
 
@@ -125,10 +129,12 @@ public sealed class GateService(NpgsqlDataSource db, LookupKeyHasher hasher, Exi
 
     private static async Task ApplyAsync(NpgsqlConnection conn, NpgsqlTransaction tx, Guid bagId, string tag, string flightId,
         BagState current, TransitionResult transition, GateVerdict verdict, Guid gateReadId, GateScan scan, string source,
-        DateTimeOffset now, CancellationToken ct)
+        DateTimeOffset now, AeroBag.Application.Coverage.ReadCoverage readCoverage, CancellationToken ct)
     {
         var newState = transition.NewState;
-        var outcome = transition.Outcome == TransitionOutcome.Applied ? "APPLIED" : "ANOMALY";
+        // Okuyucusu olmayan noktanın atlanması (ör. tipik kapsamda şuttan çıkışa) sıra dışı sayılmaz (W5).
+        var outcome = transition.Outcome == TransitionOutcome.Applied || !readCoverage.IsAnomaly(transition.SkippedStates)
+            ? "APPLIED" : "ANOMALY";
 
         await using (var upd = Cmd(conn, tx,
                          """

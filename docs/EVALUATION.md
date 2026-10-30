@@ -303,3 +303,87 @@ Tespit gecikmesi her satırda tam tolerans süresidir: kalkıştan 10 dk, indirm
 ### Kaynaklar
 - ABD Ulaştırma Bakanlığı, *Air Travel Consumer Report: December 2024, Full Year 2024 Numbers*: https://www.transportation.gov/briefing-room/air-travel-consumer-report-december-2024-full-year-2024-numbers
 - SITA, *Baggage IT Insights 2025* (basın bülteni): https://www.sita.aero/pressroom/news-releases/more-air-passengers-than-ever-with-one-of-the-lowest-rates-of-mishandled-baggage-thanks-to-tech-investments/
+
+## Okuma kapsamına duyarlılık (W5, simülasyon)
+
+**Soru:** okuyucular eksik olduğunda sistem yanlış bilgi göstermeden çalışabiliyor mu? Çoğu havalimanında bant ağzında ve banttan almada okuyucu yoktur.
+
+**Profiller** (`Coverage:Profile`, simülatörde `--coverage`):
+
+| Profil | Okuyucular (BSM her zaman vardır) |
+|---|---|
+| `full` | güvenlik, yükleme, indirme, şut, bant ağzı, banttan alma |
+| `typical` | güvenlik, yükleme, indirme, şut |
+| `minimal` | yükleme, indirme |
+
+**Komutlar:**
+- `dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode coverage-eval`
+- `... --mode alert-eval --coverage typical|minimal`
+
+**Koşullar:**
+- 200 uçuş, 27.449 bavul, tohum 42. Üç profil aynı gerçek zaman çizelgesini görür; yalnızca okumalar değişir.
+- Okuma kaybı canlı göndericiyle aynıdır: mesajların %1'i düşer, %0,5'i bozulur.
+- ML servisi bu ölçümde yoktur; indirme sonrası tahmin varsayılan aralıktır (P90 15 dk).
+- AODB'nin uçuş düzeyi ilk/son bavul zamanları simülasyonda gerçek zamandır.
+
+### Yolcu: bavul banda geldikten sonra bilgilendirilmesi
+
+"Bilgi": bant okuması varsa "bantta"; yoksa tahmin aralığı geçince "büyük olasılıkla bantta".
+
+| Profil | Gecikme medyan / p90 | Bavul gelmeden söylenen (yanlış bilgi) | Hiç söylenmeyen |
+|---|---|---|---|
+| full | 0 / 0 dk | 0 | 4 (%0,01) |
+| typical | 0,3 / 0,3 dk | 2 (%0,01) | 6 (%0,02) |
+| minimal | 8,4 / 10,9 dk | 110 (%0,4) | 381 (%1,4) |
+
+### SLA: ilk ve son bavulun kaynağı
+
+| Profil | İlk bavul: okuma / AODB | Son bavul: okuma / AODB | Sapma |
+|---|---|---|---|
+| full | 200 / 0 | 196 / 4 | 0 |
+| typical | 0 / 200 | 0 / 200 | 0 |
+| minimal | 0 / 200 | 0 / 200 | 0 |
+
+### "Sıra dışı" sayısı (1000 bavulda)
+
+Ölçümde her bavula bir çıkış kapısı okuması eklendi; bu, canlı gösterimdeki ExitGuard'ın aynısıdır.
+
+| Profil | Kapsamı bilmeyen kural | Kapsamı bilen kural (API) |
+|---|---|---|
+| full | 100,8 | 86,0 |
+| typical | 1057,9 | 57,7 |
+| minimal | 1999,5 | 28,3 |
+
+### Kayıp bavul uyarısı (varış toleransı 5 dk, okuma kaybı var)
+
+| Profil | Personel: yanlış uyarı (1000 bavulda) | Yanlış MISSING | Sonuna kadar açık kalan yanlış uyarı | Yolcu: yanlış uyarı (1000 bavulda) | Yolcu: gerçek vakada bant boşalmadan haberdar |
+|---|---|---|---|---|---|
+| full | 15,5 | 47 | 0 | 1,8 | 126/142 (%89) |
+| typical | 15,7 | 51 | 7 | 1,9 | 126/142 (%89) |
+| minimal (karardan önce) | 28,2 | 376 | 381 | 13,9 | 124/142 (%87) |
+| minimal (karardan sonra) | 28,2 | 376 | 381 | 0,2 | 79/142 (%56; yalnızca NOT_LOADED) |
+
+### Okuma
+1. **Kapsamı bilmeyen bir sistem bant ağzı olmayan havalimanında kullanılamazdı.**
+   - `typical` profilde her bavul en az bir kez, `minimal` profilde iki kez "sıra dışı" sayılırdı.
+   - ExitGuard her bavulu "banda gelmeden çıkışta okundu" diye incelemeye düşürürdü. Canlı denemede ZZ0100 için bu 105 inceleme demekti; kapsamı bilen sistemde 0.
+   - Kapsamı bilen kural yalnızca gerçekten kaybolan okumaları sayar. Okuyucu azaldıkça bu sayı da azalır (86 → 58 → 28), çünkü kaybolabilecek okuma azalır.
+2. **`typical` profilde yolcu pratikte hiçbir şey kaybetmiyor.** Şut okuması ve şuttan banda fizik hesabı (mesafe / bant hızı + 15 sn) bavul banda geldikten yaklaşık 18 sn sonra "büyük olasılıkla bantta" dedirtiyor. SLA, yer hizmetinin AODB bildirimiyle 200 uçuşun hepsinde hesaplanıyor. Kayıp bavul uyarısı `full` ile aynı davranıyor.
+3. **`minimal` profilde varış bilgisi zayıf.**
+   - Tahmin indirmeden sonraki varsayılan aralığa dayandığı için yolcu ortalama 8 dk geç öğreniyor.
+   - %0,4'üne bavul gelmeden "büyük olasılıkla bantta" deniyor.
+   - İndirme okuması kaybolan %1,4'üne hiçbir şey söylenemiyor.
+   - İndirme sonrası ML tahmini (W6) bu kurulumda gecikmeyi azaltacak ilk adım.
+4. **Karar: düzeltilemeyen uyarı yolcuya gösterilmez.**
+   - `minimal` profilde varışta tek okuyucu (indirme) var. O okuma kaybolursa bavul bir daha okunamaz; "varışta okunmadı" uyarısı kalıcı yanlış uyarı olur (381 bavul, ölçüm sonuna kadar açık).
+   - Yolcuya giden MISSING uyarılarının yaklaşık 9'da 8'i yanlıştı.
+   - İndirmeden sonra ikinci bir okuyucusu olmayan kurulumda MISSING_AT_ARRIVAL artık yalnızca personele gösteriliyor. Bu, W4'teki NOT_LOADED kararıyla aynı ilkedir.
+   - Sonuç: yolcuya giden yanlış uyarı 1000 bavulda 13,9'dan 0,2'ye düştü.
+   - Bedeli: bu kurulumda gerçekten kaybolan bavulun yolcusu bunu sistemden değil personelden öğrenir. Gerçek vakalarda yolcunun bant boşalmadan haberdar olma oranı %87'den %56'ya indi; kalan %56 NOT_LOADED vakalarıdır.
+5. **SLA her profilde hesaplanabiliyor, ama burada sapmanın sıfır çıkması bir varsayımdır.** Simülasyonda AODB gerçek zamanı bildiriyor. Sahada yer hizmetinin elle girdiği zamanlar yuvarlanır ve gecikir. `full` profilde 4 uçuşta son bavul okuma kaybı yüzünden AODB'den geldi; AODB olmasaydı bu uçuşların son bavulu hiç gerçekleşmezdi.
+
+### Sınırlar
+- Okuma kaybının bavuldan ve noktadan bağımsız olduğu varsayıldı. Gerçekte bozuk bir okuyucu aynı noktada art arda kaçırır; bu `minimal` profili daha da kötüleştirir.
+- AODB zamanları hatasız varsayıldı.
+- ML servisi ölçüme dahil değil; `typical` ve `minimal` profillerde indirme sonrası ETA canlı sistemde daha iyi olabilir.
+- Çıkış kapısı okumasının her bavulda olduğu varsayıldı (yalnızca "sıra dışı" sayımı için).

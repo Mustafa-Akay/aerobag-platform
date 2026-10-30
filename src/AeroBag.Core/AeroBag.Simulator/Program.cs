@@ -24,6 +24,11 @@ if (a.ContainsKey("help"))
           alert-eval modu: kayıp bavul uyarısını API'siz, çok sayıda uçuşta değerlendirir (varsayılan --flights 200)
                      --graces 2,5,10,15,20   denenecek varış (indirme bitti) toleransları (dk); kalkış toleransı 10 dk
                      --drop-rate P --corrupt-rate P   okuma kaybı (varsayılan 0.01, 0.005)
+          coverage-eval modu: okuma kapsamına duyarlılığı API'siz ölçer (varsayılan --flights 200); üç profil aynı gerçek
+                     zaman çizelgesini görür. --drop-rate P --corrupt-rate P (varsayılan 0.01, 0.005)
+          tüm modlar:  --coverage full|typical|minimal   okuma kapsamı (varsayılan full). typical: bant ağzı ve banttan alma
+                       okuması yok; minimal: yalnızca yükleme ve indirme. Canlı modda API de aynı profille açılmalı
+                       (Coverage__Profile ortam değişkeni).
           live ve alert-eval: --not-loaded-rate P   yüklenmeyen bavul oranı (varsayılan 0.003, demo varsayımı)
                               --missing-rate P      varışta bulunmayan bavul oranı (varsayılan 0.002, demo varsayımı)
                      --speed X   sanal saniye / gerçek saniye (varsayılan 60)
@@ -57,12 +62,26 @@ if (notLoadedRate < 0 || missingRate < 0 || notLoadedRate + missingRate > 1)
     Console.Error.WriteLine("--not-loaded-rate ve --missing-rate 0 ile 1 arasında olmalı (toplamları en fazla 1).");
     return 1;
 }
-var options = new SimOptions(GetInt("flights", mode is "gate-eval" or "alert-eval" ? 200 : 3), GetInt("bags", 120), GetInt("seed", 42), regime, start,
-    exitScans, exitScans && gatePackets, notLoadedRate, missingRate);
+AeroBag.Application.Coverage.ReadCoverage coverage;
+try
+{
+    coverage = AeroBag.Application.Coverage.ReadCoverage.Parse(Get("coverage", "full"));
+}
+catch (ArgumentException ex)
+{
+    Console.Error.WriteLine(ex.Message.Replace("Coverage:Profile", "--coverage", StringComparison.Ordinal));
+    return 1;
+}
+var options = new SimOptions(GetInt("flights", mode is "gate-eval" or "alert-eval" or "coverage-eval" ? 200 : 3), GetInt("bags", 120), GetInt("seed", 42), regime, start,
+    exitScans, exitScans && gatePackets, notLoadedRate, missingRate, coverage);
 var flights = SimulationRunner.Run(options);
 var totalBags = flights.Sum(f => f.Bags.Count);
-Console.WriteLine($"{flights.Count} uçuş, {totalBags} bavul üretildi (tohum {options.Seed}, rejim {regime}).");
-foreach (var f in mode is "gate-eval" or "alert-eval" ? Array.Empty<FlightResult>() : flights)
+Console.WriteLine($"{flights.Count} uçuş, {totalBags} bavul üretildi (tohum {options.Seed}, rejim {regime}, okuma kapsamı {coverage.Name}).");
+if (mode == "live" && coverage != AeroBag.Application.Coverage.ReadCoverage.Full)
+{
+    Console.WriteLine($"  Not: API de aynı kapsamla açılmalı: $env:Coverage__Profile=\"{coverage.Name}\" (yoksa bant okuması beklenir).");
+}
+foreach (var f in mode is "gate-eval" or "alert-eval" or "coverage-eval" ? Array.Empty<FlightResult>() : flights)
 {
     var first = f.Bags.Single(b => b.IsFirst);
     var last = f.Bags.Single(b => b.IsLast);
@@ -81,6 +100,20 @@ if (mode == "gate-eval")
     return 0;
 }
 
+if (mode == "coverage-eval")
+{
+    var drop = GetDouble("drop-rate", 0.01);
+    var corrupt = GetDouble("corrupt-rate", 0.005);
+    var profiles = new[] { AeroBag.Application.Coverage.ReadCoverage.Full, AeroBag.Application.Coverage.ReadCoverage.Typical,
+        AeroBag.Application.Coverage.ReadCoverage.Minimal };
+    // Aynı tohum: üç profil aynı gerçek zaman çizelgesini görür, yalnızca okumalar değişir.
+    var rows = profiles.Select(p => CoverageEvaluation.Evaluate(SimulationRunner.Run(options with { Coverage = p }), p, drop, corrupt, options.Seed + 1)).ToList();
+    Console.WriteLine($"Okuma kaybı {drop}+{corrupt}. ML servisi bu ölçümde yok: indirme sonrası tahmin varsayılan aralıktır.");
+    Console.WriteLine(CoverageEvaluation.Report(rows));
+    Console.WriteLine("Kayıp bavul uyarısının kapsamaya duyarlılığı için: --mode alert-eval --coverage typical|minimal");
+    return 0;
+}
+
 if (mode == "alert-eval")
 {
     var graces = Get("graces", "2,5,10,15,20").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -92,11 +125,11 @@ if (mode == "alert-eval")
     Console.WriteLine($"Senaryo: {nl} yüklenmeyen, {mi} varışta bulunmayan bavul. Okuma kaybı {drop}+{corrupt}. Oranlar demo varsayımıdır.");
     var rows = new List<AlertEvaluation.Row>
     {
-        AlertEvaluation.Evaluate(flights, AeroBag.Application.Alerts.AlertPolicy.Default, 0, 0, options.Seed + 1, "kayıpsız"),
+        AlertEvaluation.Evaluate(flights, AeroBag.Application.Alerts.AlertPolicy.Default, 0, 0, options.Seed + 1, "kayıpsız", coverage),
     };
     // Kalkış toleransı varsayılanda sabit; denenen, varış ("indirme bitti") toleransıdır.
     rows.AddRange(graces.Select(g => AlertEvaluation.Evaluate(flights,
-        AeroBag.Application.Alerts.AlertPolicy.Default with { MissingGrace = TimeSpan.FromMinutes(g) }, drop, corrupt, options.Seed + 1, "kayıplı")));
+        AeroBag.Application.Alerts.AlertPolicy.Default with { MissingGrace = TimeSpan.FromMinutes(g) }, drop, corrupt, options.Seed + 1, "kayıplı", coverage)));
     Console.WriteLine(AlertEvaluation.Report(rows));
     return 0;
 }
@@ -162,7 +195,7 @@ if (mode == "live")
     return counts.ContainsKey("CONNECTION_ERROR") ? 2 : 0;
 }
 
-Console.Error.WriteLine("--mode live, csv, gate-eval ya da alert-eval olmalı.");
+Console.Error.WriteLine("--mode live, csv, gate-eval, alert-eval ya da coverage-eval olmalı.");
 return 1;
 
 Dictionary<string, string> ParseArgs(string[] argv)

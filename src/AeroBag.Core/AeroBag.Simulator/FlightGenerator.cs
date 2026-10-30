@@ -217,8 +217,23 @@ public static class FlightGenerator
 
         var info = new FlightInfo(flightId, flightNumber, date, regime, aircraft, wide, rain ? "RAIN" : "CLEAR",
             standDist, chuteDist, speed, carousel, bagCount, onBlock, 0, handler,
-            DepartedUtc: departure, UnloadingCompletedUtc: unloadingCompleted);
+            DepartedUtc: departure, UnloadingCompletedUtc: unloadingCompleted,
+            FirstBagOnBeltUtc: carouselT[firstIdx], LastBagOnBeltUtc: carouselT[lastIdx]);
 
-        return new FlightResult(info, bags, messages.OrderBy(m => m.TimeUtc).ToList());
+        // Okuma kapsamı (W5): okuyucusu olmayan noktanın mesajı hiç oluşmaz. Gerçek zamanlar (BagTruth) değişmez.
+        var coverage = o.Coverage ?? AeroBag.Application.Coverage.ReadCoverage.Full;
+        var visible = messages.Where(m => IsCovered(m.Kind, coverage));
+        return new FlightResult(info, bags, visible.OrderBy(m => m.TimeUtc).ToList());
     }
+
+    private static bool IsCovered(string kind, AeroBag.Application.Coverage.ReadCoverage coverage) => kind switch
+    {
+        "SEC" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Security),
+        "LOAD" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Load),
+        "BUM" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Unload),
+        "CHUTE" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Chute),
+        "CAROUSEL" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Carousel),
+        "CLAIM" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Claim),
+        _ => true, // BSM, çıkış kapısı (ExitGuard) ve BPM çıkış okuması kapsamdan bağımsızdır
+    };
 }

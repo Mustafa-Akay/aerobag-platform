@@ -428,3 +428,12 @@ Bilinen sınırlar:
   - **Neden:** API'nin varsayılan ML adresi `http://localhost:8000` idi; docker-compose servisi yalnızca IPv4'te (`127.0.0.1:8000`) yayınlar. Windows `localhost`'u önce `::1` (IPv6) ile dener ve orada dinleyen olmadığını ~2 sn sonra anlar. Bağlantı havuzundaki bağlantı boşta kalıp kapanınca her yeni bağlantı bu gecikmeyi ödüyor, 2 sn'lik zaman aşımına takılıyordu.
   - **Ölçüm (Windows, PowerShell `Invoke-RestMethod /health`):** `localhost` 2.167 ms, `127.0.0.1` 26 ms.
   - **Düzeltme:** varsayılan adres `http://127.0.0.1:8000`. Uyarı çıkmayan durumlarda da yeni bağlantı kuran yolcu sorguları ~2 sn bekliyordu; bu da kalktı.
+
+## Faz 6, W9: İngilizce yolcu ekranı
+
+- **Kapsam:** yolcu sayfasının bütün metinleri Türkçe ve İngilizce: form, hata mesajları, adım çubuğu, durum cümleleri, kayıp bavul bildirimleri, varış tahmini ve tahminin dayanağı, süre ve saat biçimi, sayfa başlığı. Personel ekranları (operasyon panosu, uyarılar, SLA, güvenlik) şimdilik yalnızca Türkçe; dil seçici yalnızca yolcu ekranında görünür.
+- **Yapı:** metinler tek bir sözlükte (`src/aerobag-ui/src/i18n.tsx`). İngilizce sözlük Türkçe sözlükle aynı tipi taşır: bir anahtar eksik ya da fazla olursa TypeScript derlemesi hata verir. `states.ts` artık yalnızca adım sırası ve kuralları tutar.
+- **Varsayılan dil:** kullanıcının daha önce seçtiği dil (tarayıcıda `localStorage`), yoksa tarayıcının ilk dili Türkçe ise Türkçe, değilse İngilizce. Antalya'daki yabancı yolcu için ortak dil İngilizce kabul edildi; Almanca ve Rusça sözlük aynı yapıya eklenebilir.
+- **Erişilebilirlik:** `<html lang>` seçilen dile göre değişir (ekran okuyucu doğru telaffuz eder). Dil düğmeleri `aria-pressed` taşır ve dil adını kendi dilinde okutur.
+- **Hata mesajları:** metin değil türü saklanır; açık bir hata mesajı dil değiştirilince yeni dilde görünür.
+- **Kontrol:** sözlüğün iki dilinde aynı 61 anahtar var; İngilizce metinlerde Türkçe karakter kalmadı (bir defalık betikle sınandı; arayüzde test çalıştırıcısı yok).

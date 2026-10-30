@@ -151,8 +151,8 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W6 ML sözleşme testi | Tamam (PR birleştirildi) |
 | W7 Yük testi | Tamam (PR birleştirildi) |
 | W8 Öncelikli bavul | Ertelendi (sıranın sonunda yeniden değerlendirilecek) |
-| W9 İngilizce arayüz | Başlamadı |
+| W9 İngilizce arayüz | Yolcu ekranı hazır, PR bekliyor (branch `faz6/w9-english-ui`); personel ekranları ikinci adım |
 | W10 Aktarma bavulu | Başlamadı |
 | W11 ExitGuard maliyeti | Başlamadı |
-| W12a Yolcu jetonunun kapsamı | Kod ve testler hazır, PR bekliyor (branch `faz6/w12a-token-scope`) |
+| W12a Yolcu jetonunun kapsamı | Tamam (PR birleştirildi) |
 | W12 Temizlik ve belgeler (kalanı) | Başlamadı |

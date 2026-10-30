@@ -85,7 +85,10 @@ builder.Services.AddSingleton<GateService>();
 builder.Services.AddSingleton<SecurityReviews>();
 
 // ML tahmin servisi (Faz 2). Ml:BaseUrl boşsa kapalıdır; servis erişilemezse sistem taban çizgisine düşer.
-var mlUrl = builder.Configuration["Ml:BaseUrl"] ?? "http://localhost:8000";
+// Varsayılan adres "localhost" değil 127.0.0.1: docker-compose servisi yalnızca IPv4'te (127.0.0.1:8000) yayınlar.
+// "localhost" Windows'ta önce ::1'e (IPv6) bağlanmayı dener; orada dinleyen olmadığı için her yeni bağlantı ~2 sn
+// geç kurulur ve 2 sn'lik zaman aşımıyla aralıklı "ML yanıt vermedi" uyarısı üretir (30 Ekim canlı denemesi).
+var mlUrl = builder.Configuration["Ml:BaseUrl"] ?? "http://127.0.0.1:8000";
 // W6: ML hataları MlStatus'a yazılır ve loglanır; zaman aşımı yapılandırılabilir (Ml:TimeoutSeconds, varsayılan 2).
 var mlTimeout = builder.Configuration.GetValue("Ml:TimeoutSeconds", 2.0);
 if (mlTimeout is <= 0 or > 60)
@@ -257,7 +260,8 @@ app.MapPost("/v1/events", async (HttpRequest request, BaggageEventProcessor proc
     };
 }).WithMetadata(new RequireSourceScope(IngestScopes.Events));
 
-// Personel tüm bagajları, yolcu yalnızca jetonundaki bagajları görür. Yetkisiz bagaj için 404 döner (varlığı sızdırılmaz).
+// Personel tüm bagajları, yolcu yalnızca jetonundaki (etiket, uçuş) çiftlerini görür. Yetkisiz bagaj için 404 döner
+// (varlığı sızdırılmaz). Yolcu için uçuş jetondan alınır: aynı etiketin başka bir uçuştaki bavulu açılmaz.
 app.MapGet("/v1/bags/{bagTag}", async (string bagTag, string? flight, ClaimsPrincipal user, BagQueries queries, CancellationToken ct) =>
 {
     if (!Regex.IsMatch(bagTag, @"^\d{10}$"))
@@ -265,9 +269,22 @@ app.MapGet("/v1/bags/{bagTag}", async (string bagTag, string? flight, ClaimsPrin
         return Results.BadRequest(new { error = "Bagaj etiketi 10 haneli olmalı." });
     }
 
-    if (!user.CanSeeBag(bagTag))
+    if (!user.IsStaff())
     {
-        return Results.NotFound();
+        var flights = user.PassengerFlightsFor(bagTag);
+        if (flight is not null && !flights.Contains(flight, StringComparer.Ordinal))
+        {
+            return Results.NotFound();
+        }
+
+        flight ??= flights.Count == 1 ? flights[0] : null;
+        if (flight is null)
+        {
+            // Jetonda bu etiket yoksa 404; birden çok uçuşta varsa hangisinin istendiği belirtilmeli.
+            return flights.Count == 0
+                ? Results.NotFound()
+                : Results.BadRequest(new { error = "Bu etiket için uçuş (flight) belirtilmeli." });
+        }
     }
 
     var view = await queries.GetAsync(bagTag, flight, ct);
@@ -306,8 +323,8 @@ app.MapPost("/v1/lookup", async (LookupRequest body, PassengerQueries queries, T
         return notFound;
     }
 
-    // Yolcu jetonu yalnızca bu sorgudaki bagajlara erişim verir (canlı kanal ve /v1/bags için).
-    var issued = tokens.IssuePassenger(result.Bags.Select(b => b.BagTag));
+    // Yolcu jetonu yalnızca bu sorgudaki bavullara, uçuşlarıyla birlikte erişim verir (canlı kanal ve /v1/bags için).
+    var issued = tokens.IssuePassenger(result.Bags.Select(b => (b.BagTag, b.FlightId)));
     return Results.Ok(new { asOfUtc = result.AsOfUtc, bags = result.Bags, accessToken = issued.AccessToken, expiresInSec = issued.ExpiresInSec });
 }).RequireRateLimiting("lookup");
 

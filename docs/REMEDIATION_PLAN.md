@@ -37,6 +37,8 @@ Dalga 3 (genişleme)  W8 Öncelikli bavul   W9 İngilizce arayüz   W10 Aktarma 
                      W11 ExitGuard maliyet analizi   W12 Temizlik ve belge sadeleştirme
 ```
 
+**Dalga 3 için kararlaştırılan sıra (30 Ekim):** W12a (yolcu jetonunun kapsamı, güvenlik) → W9 → W11 → W10 (önce ayrıntılı plan, büyük olasılıkla iki PR) → W12'nin kalanı → toparlama (demo senaryosu, README, tek sayfalık özet, gerçek veri planı). W8 bu sıranın sonunda yeniden değerlendirilir (aşağıda).
+
 Dalga 0 önce yapılır, çünkü Dalga 1'deki her paket şemayı değiştirecek ve yeni zamanlanmış işler ekleyecek. Bunlar göç ve saat soyutlaması olmadan yapılırsa aynı borç büyür.
 
 ## 3. İş paketleri
@@ -113,6 +115,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 
 #### W8. Öncelikli bavul (B8)
 - BSM'den öncelik (kabin sınıfı ya da öncelik işareti). Simülatörde öncelikli bavullar indirme sırasında öne alınır. ETA'da öncelik özelliği. Ölçüm: öncelikli bavullar için ETA hatasının özellikli ve özelliksiz karşılaştırması. Simülatör ürettiği için sonuç döngüseldir, bu açıkça yazılır.
+- **Ertelendi (30 Ekim):** bavulların indirme sırasını yer hizmetleri belirler; AeroBag bu sırayı değiştirmez, yalnızca izler. Öncelik etiketinin simülatörde öne alınması, kendi ürettiğimiz sonucu ölçmek olur. Paket, diğer paketler bittikten sonra "öncelik sözü tutuluyor mu" denetimi (öncelikli bavulların gerçekten önce banda gelip gelmediğini ölçen bir gösterge) olarak yeniden düşünülecek.
 
 #### W9. İngilizce arayüz (B9)
 - Yolcu sayfası ve bildirim metinleri için TR/EN sözlüğü ve dil seçici. Tarayıcı diline göre varsayılan. Personel ekranları ikinci adımda.
@@ -127,7 +130,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 
 #### W12. Temizlik ve belge sadeleştirme (B12)
 - Ortak veritabanı yardımcıları tek yerde. `IMPLEMENTATION_STATUS.md` ikiye bölünür: kısa ve güncel bir durum belgesi ile ayrı bir değişiklik günlüğü (`CHANGELOG.md`).
-- **Yolcu jetonunun kapsamı (W4 canlı denemesinden, 29 Ekim):** jeton bavulu yalnızca etiket numarasıyla tanır; etiketler zamanla yeniden kullanılır. Jeton `etiket@uçuş` kapsamına alınır; `/v1/bags/{tag}` ve canlı kanal grupları da uçuşla birlikte çalışır.
+- **W12a. Yolcu jetonunun kapsamı (W4 canlı denemesinden, 29 Ekim):** jeton bavulu yalnızca etiket numarasıyla tanır; etiketler zamanla yeniden kullanılır. Jeton `etiket@uçuş` kapsamına alınır; `/v1/bags/{tag}` ve canlı kanal grupları da uçuşla birlikte çalışır. Güvenlik açığı olduğu için W12'nin kalanından ayrılıp Dalga 3'ün başına alındı.
 
 ## 4. Çalışma kuralları
 
@@ -146,9 +149,10 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W4 Kayıp bavul tespiti | Tamam (PR'lar birleştirildi) |
 | W5 Okuma kapsamı profilleri | Tamam (PR birleştirildi) |
 | W6 ML sözleşme testi | Tamam (PR birleştirildi) |
-| W7 Yük testi | Ölçüldü, PR bekliyor (branch `faz6/w7-load-test`) |
-| W8 Öncelikli bavul | Başlamadı |
+| W7 Yük testi | Tamam (PR birleştirildi) |
+| W8 Öncelikli bavul | Ertelendi (sıranın sonunda yeniden değerlendirilecek) |
 | W9 İngilizce arayüz | Başlamadı |
 | W10 Aktarma bavulu | Başlamadı |
 | W11 ExitGuard maliyeti | Başlamadı |
-| W12 Temizlik ve belgeler | Başlamadı |
+| W12a Yolcu jetonunun kapsamı | Kod ve testler hazır, PR bekliyor (branch `faz6/w12a-token-scope`) |
+| W12 Temizlik ve belgeler (kalanı) | Başlamadı |

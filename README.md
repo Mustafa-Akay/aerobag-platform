@@ -2,7 +2,13 @@
 
 ![ci](https://github.com/Mustafa-Akay/aerobag-platform/actions/workflows/ci.yml/badge.svg)
 
-Havalimanında bavulun yolculuğunu uçtan uca izleyen bir mühendislik projesi. Yolcuya "bavulum ne zaman gelir?" sorusunun cevabını tek bir saat yerine bir **tahmin aralığı** olarak verir. Operasyon ekibine teslim hedefi ve gecikme riski panosu sunar. Çıkış kapısında bavulun doğru kişiyle çıkıp çıkmadığını yanlış alarm üretmeden kontrol etmeye çalışır.
+Bir **havayolunun bavul takip sistemi** için tek istasyon modülü: bavulun check-in'den banda ya da bağlantı uçağına kadar yolculuğunu izler ve üç soruya cevap verir:
+
+1. **Bu bavul uçağa bindi mi?** Yüklenmeyen ya da varışta indirilmeyen bavul, okuyucu kaçırmalarına karşı ölçülmüş bir uyarıyla personele ve yolcuya bildirilir.
+2. **Aktarma bavulu bağlantıya yetişecek mi?** Gelen ve bağlantı uçuşundaki bavul birbirine bağlanır; kabul kapanışını kaçıranlar panoda, bağlantıyı kaçıranlar yolcu kartında görünür.
+3. **Yolcu bavulunu ne zaman alacak?** Tek bir saat yerine bir **tahmin aralığı**; istasyon için ilk/son bavul teslim hedefi ve gecikme riski.
+
+Neden havayolu: bavul kaybolduğunda sorumlu olan ve yolcunun başvurduğu taraf havayoludur, yolcu verisi (PNR) onun sistemindedir ve IATA Resolution 753 bavul takibini havayollarından ister. Yer hizmetleri firması ve havalimanı bu kurguda veri sağlayan taraftır. Çıkış kapısında bavul–PNR eşleştirmesi (ExitGuard) havalimanının kurabileceği **isteğe bağlı** bir modül olarak kodda durur.
 
 > **Bu bir ürün değil, bir portfolyo projesidir.** Bütün veri simülasyondan gelir; gerçek havalimanı, havayolu ya da yolcu verisi kullanılmaz ve IATA uyumluluğu iddia edilmez. Sonuçlar ve sınırları [docs/EVALUATION.md](docs/EVALUATION.md)'de, ölçülmeyen ya da yapılmayan her şey [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md)'de açıkça yazılıdır.
 
@@ -14,9 +20,11 @@ Havalimanında bavulun yolculuğunu uçtan uca izleyen bir mühendislik projesi.
 
 ## Öne çıkanlar
 
-**Aralık tahmini, taban çizgisine karşı ölçüldü.** İndirmeden banta kalan süre için kuantil LightGBM, aynı rejimde ampirik yöntemin P50 hatasını 1,60 dakikadan 0,72 dakikaya indirir, aralığı 5,0 dakikadan 2,2 dakikaya daraltır ve kapsamayı hedefte (%79) tutar. Yağmurlu ve yavaş bir güne (rejim kayması) geçince model fazla emin kalır (kapsama %45). Biten bavulların gerçek sürelerinden beslenen canlı düzeltme kapsamayı %77'ye, P50 hatasını 1,0 dakikaya getirir. Bavula özgü özelliklerin katkı sağlamadığı gibi olumsuz sonuçlar da raporda.
+**Kayıp bavul uyarısı, okuyucu kaçırmasıyla birlikte ölçüldü.** Bavulun uçağa yüklenmediği ya da varışta indirilmediği bir durum değil uyarıdır; bavul sonradan okunursa uyarı "bulundu" diye kapanır. Simülasyonda yüklenmeyen bavulların hepsi uçak inmeden personel ekranına düşer. İlk ölçümde bu uyarıların ~5'te 4'ü kaçırılan bir yükleme okumasından doğan yanlış uyarıydı; bu yüzden yolcuya yalnızca varışta gösteriliyor. Sonuç: yolcuya giden yanlış uyarı 1000 bavulda 15,5'ten 1,8'e indi, gerçek vakaların %89'unda yolcu bant boşalmadan haberdar oluyor.
 
-**Çıkış doğrulama (ExitGuard) yanlış alarm maliyetiyle birlikte ölçüldü.** Kapıda okunan bavul ile sunulan PNR'ın özeti karşılaştırılır. Aynı rezervasyondaki yolcular birbirinin bavulunu alabilir, uyuşmazlık kapıda alarm değil sessiz bir inceleme kaydı üretir. Varsayılan sensör hatalarıyla yapılan 27.000 bavulluk simülasyonda vakaların %87'si yakalandı ve hiçbiri sahip diye geçmedi. Meşru okumaların %1,38'i yanlış alarma dönüştü. Vaka çok nadir olduğu için açılan incelemelerin yalnızca yaklaşık %24'ü gerçek (taban oran etkisi). Kapıda alarm yerine insan incelemesi seçilmesinin gerekçesi bu.
+**Okuyucu olmayan yerde "bilmiyorum" diyebiliyor.** Çoğu istasyonda bant ağzında ve banttan almada okuyucu yoktur. Okuma kapsamı yapılandırmayla verilir (`full`, `typical`, `minimal`); sistem bu noktaların atlanmasını sıra dışı saymaz, SLA'yı yer hizmetinin bildirdiği zamanlara dayandırır ve yolcuya "büyük olasılıkla bantta" der. `typical` kurulumda kapsamı bilmeyen bir kural 1000 bavulda ~1058 "sıra dışı" sayardı (pratikte her bavul); kapsamı bilen kural ~58 sayıyor, yani yalnızca gerçekten kaybolan okumaları.
+
+**Aralık tahmini, taban çizgisine karşı ölçüldü.** İndirmeden banta kalan süre için kuantil LightGBM, aynı rejimde ampirik yöntemin P50 hatasını 1,60 dakikadan 0,72 dakikaya indirir, aralığı 5,0 dakikadan 2,2 dakikaya daraltır ve kapsamayı hedefte (%79) tutar. Yağmurlu ve yavaş bir güne (rejim kayması) geçince model fazla emin kalır (kapsama %45). Biten bavulların gerçek sürelerinden beslenen canlı düzeltme kapsamayı %77'ye, P50 hatasını 1,0 dakikaya getirir. Bavula özgü özelliklerin katkı sağlamadığı gibi olumsuz sonuçlar da raporda.
 
 **Güvenlik tasarımı tehdit modeliyle ve testlerle eşleştirildi.**
 - **Kimlik doğrulama:** personel kısa ömürlü JWT ve rollerle giriyor. Yolcu jetonu yalnızca kendi bavullarını görüyor.
@@ -31,7 +39,9 @@ Havalimanında bavulun yolculuğunu uçtan uca izleyen bir mühendislik projesi.
 - **Mesaj güvenliği:** çift gelen mesajlar tekilleştirilir, sırasız mesajlar durumu geri almaz, bozuk mesajlar ölü mektup tablosuna gider.
 - **Canlı bildirim:** değişiklikler transactional outbox ile SignalR'a iletilir. Bildirimler içeriksizdir.
 
-**225 .NET testi**, birim testleri ve Testcontainers ile gerçek PostgreSQL üzerinde çalışan entegrasyon testleri. Bunlara ek olarak ML tarafı için Python testleri var. Hepsi her `push`'ta GitHub Actions'ta çalışır.
+**İsteğe bağlı modül: çıkış doğrulama (ExitGuard), yanlış alarm maliyetiyle birlikte ölçüldü.** Kapıda okunan bavul ile sunulan PNR'ın özeti karşılaştırılır. Aynı rezervasyondaki yolcular birbirinin bavulunu alabilir, uyuşmazlık kapıda alarm değil sessiz bir inceleme kaydı üretir. Varsayılan sensör hatalarıyla yapılan 27.000 bavulluk simülasyonda vakaların %87'si yakalandı ve hiçbiri sahip diye geçmedi. Meşru okumaların %1,38'i yanlış alarma dönüştü. Vaka çok nadir olduğu için açılan incelemelerin yalnızca yaklaşık %24'ü gerçek (taban oran etkisi). Kapıda alarm yerine insan incelemesi seçilmesinin gerekçesi bu.
+
+**411 .NET testi**, birim testleri ve Testcontainers ile gerçek PostgreSQL üzerinde çalışan entegrasyon testleri. Bunlara ek olarak ML tarafı için Python testleri var. Hepsi her `push`'ta GitHub Actions'ta çalışır.
 
 ## Mimari
 
@@ -115,6 +125,7 @@ cd ml; python -m pytest -q tests         # Python 3.12, ml/requirements.txt
 
 ## Sınırlar
 
+- **Tek istasyon:** bu sürüm bir havayolunun tek istasyondaki görünümüdür. Ağa genişleme (hub ve istasyonlar, istasyon başına okuma kapsamı, aktarma bavulunun varış tarafı) sektörden gelecek geri bildirime göre yapılacak.
 - **Simülasyon:** sonuçların hepsi simülasyondan geliyor. Model ile simülatör aynı üretici ailesinden olduğu için sonuçlar iyimser olabilir. Simülatör kamuya açık referanslarla yalnızca büyüklük mertebesi olarak karşılaştırıldı, kalibre edilmedi.
 - **ExitGuard oranları:** benim koyduğum sensör varsayımlarına bağlı, sahada ölçülmedi.
 - **Yerel kurulum:** TLS, anahtar kasası, anahtar döndürme ve çok örnekli kurulum kapsam dışı. Depodaki anahtarlar ve parolalar geliştirme varsayılanlarıdır.

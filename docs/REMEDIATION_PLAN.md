@@ -159,4 +159,5 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W10b Aktarma bavulu: risk ve ölçüm | Sonraya bırakıldı (yeni özellik yok kararı, 31 Ekim) |
 | W11 ExitGuard maliyeti | Kapsam dışı (gerekçe yukarıda) |
 | W12a Yolcu jetonunun kapsamı | Tamam (PR birleştirildi) |
-| W12 Temizlik ve belgeler (kalanı) | Ortak DB yardımcıları tamam (PR #14); `IMPLEMENTATION_STATUS` → kısa durum + `CHANGELOG` bu dalda (`faz6/w12-docs`) |
+| W12 Temizlik ve belgeler (kalanı) | Tamam (PR #14 ortak DB yardımcıları, PR #15 `IMPLEMENTATION_STATUS` + `CHANGELOG`) |
+| Toparlama T1: havayolu çerçevesi (README, ARCHITECTURE v2.2) | Bu dalda (`faz6/t1-cerceve`) |

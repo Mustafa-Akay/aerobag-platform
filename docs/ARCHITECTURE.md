@@ -1,11 +1,22 @@
-# AeroBag: Bagaj Yolculuğu, ETA/SLA Tahmini ve Çıkış Doğrulama
-## Mimari ve Veri Akışı Tasarım Dokümanı (v2.1)
+# AeroBag: Havayolu için Bavul Takibi, ETA/SLA Tahmini ve Kayıp Bavul Uyarısı
+## Mimari ve Veri Akışı Tasarım Dokümanı (v2.2)
 
 > **Not:** Bu belge hedef tasarımdır. Şu an çalışan kodun tasarımdan ayrıştığı noktalar ve bilinen eksikler için [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) dosyasına bakın.
 
-**Durum:** v2.1 taslak. Simülasyon verisiyle çalışan bir mühendislik portfolyo projesidir. Gerçek kurum verisi, gerçek yolcu verisi ya da canlı havalimanı sistemleri kullanılmaz.
+**Durum:** v2.2 taslak. Simülasyon verisiyle çalışan bir mühendislik portfolyo projesidir. Gerçek kurum verisi, gerçek yolcu verisi ya da canlı havalimanı sistemleri kullanılmaz.
 
-Bu doküman; havayolu, yer hizmetleri şirketi ve havalimanı işletmecisi operasyonlarına yönelik bir bagaj yolculuğu platformunun yazılım mimarisini, veri akışını, girdi/çıktı sözleşmelerini, değerlendirme yöntemini ve güvenlik yaklaşımını tanımlar. Dokümandaki tüm firma, yolcu, PNR ve mesaj örnekleri **kurgusaldır**.
+Bu doküman bir bagaj yolculuğu platformunun yazılım mimarisini, veri akışını, girdi/çıktı sözleşmelerini, değerlendirme yöntemini ve güvenlik yaklaşımını tanımlar. Dokümandaki tüm firma, yolcu, PNR ve mesaj örnekleri **kurgusaldır**.
+
+**Konumlandırma (v2.2, 31 Ekim 2026):** sistem bir **havayolunun** bavul takip sisteminin **tek istasyon modülüdür**. Bavul kaybolduğunda sorumlu olan ve yolcunun başvurduğu taraf havayoludur, yolcu verisi (PNR) onun sistemindedir ve IATA Resolution 753 bavul takibini havayollarından ister. Taraflar:
+
+| Taraf | Rolü |
+| --- | --- |
+| Havayolu (istasyon operasyonu, hub kontrol) | Kullanıcı: yüklenmeyen, kaybolan ve bağlantıya yetişmeyen bavullar; ilk/son bavul teslim hedefi |
+| Yolcu | Son kullanıcı: kendi bavulunun adımları ve tahmini bant süresi |
+| Yer hizmetleri firması | Veri sağlayan taraf: okumalar (BPM/BUM) ve kilometre taşları; teslim hedefi onun sözleşmesidir |
+| Havalimanı işletmesi | Veri sağlayan taraf: AODB bağlamı (bant, park yeri); isterse çıkış doğrulama modülünü (ExitGuard) kurar |
+
+Ağa genişleme (hub ve istasyonlar, istasyon başına okuma kapsamı, aktarma bavulunun varış tarafı) bu sürümün kapsamı dışındadır; sektörden gelecek geri bildirime göre ele alınacaktır.
 
 ---
 
@@ -16,7 +27,8 @@ Bu doküman; havayolu, yer hizmetleri şirketi ve havalimanı işletmecisi opera
 1. Bavul olaylarından (check-in, yükleme, indirme, şut, bant, çıkış) bavul bazlı durum takibi yapmak.
 2. Yolcuya "bavulunuz yaklaşık ne zaman bantta olacak" bilgisini **aralık** olarak göstermek.
 3. Operasyon ekibine bant teslim süresi (SLA) ve gecikme risk panosu sunmak.
-4. İkinci aşamada, çıkışta bavul ve yolcu eşleşmesini kontrol eden, **sessiz uyarı** üreten bir modül eklemek.
+4. Uçağa yüklenmeyen, varışta indirilmeyen ve bağlantıya yetişmeyen bavulu tespit edip personele ve yolcuya bildirmek (Faz 6).
+5. **İsteğe bağlı olarak**, havalimanının kurabileceği bir çıkış kapısında bavul ve yolcu eşleşmesini kontrol eden, **sessiz uyarı** üreten bir modül (ExitGuard) sunmak.
 
 ### 0.2 Kapsam dışı
 
@@ -24,6 +36,7 @@ Bu doküman; havayolu, yer hizmetleri şirketi ve havalimanı işletmecisi opera
 - Mobil uygulama (yolcu arayüzü mobil uyumlu web sayfasıdır).
 - Gerçek yolcu verisi, gerçek kurum verisi, canlı sistemlere bağlantı.
 - Ödeme ve karmaşık kullanıcı yönetimi.
+- Çok istasyonlu ağ, havayolları arası (interline) bavul ve kayıp bavul dosyasının açılıp yönetilmesi (WorldTracer benzeri süreç). Sistem kayıp bavulu tespit eder, sonrasındaki süreci yönetmez.
 
 ### 0.3 İddia politikası
 
@@ -608,7 +621,7 @@ Bu bölüm Faz 1'den itibaren tasarım kararlarına yön verir. Çalışan kodun
 
 ## 11. Antalya (AYT) senaryoları
 
-Bunlar **modelleme varsayımlarıdır**, ölçüm değildir; gerçek operasyon yetkilileriyle konuşunca güncellenmeleri beklenir.
+Bunlar **modelleme varsayımlarıdır**, ölçüm değildir; gerçek operasyon yetkilileriyle konuşunca güncellenmeleri beklenir. Havayolu kurgusunda AYT, yüksek hacimli ve yaz yoğunluklu bir varış istasyonudur; çıkış doğrulamasıyla ilgili satırlar yalnızca havalimanı ExitGuard'ı kurarsa geçerlidir.
 
 | Senaryo | Açıklama | Neden önemli |
 | --- | --- | --- |
@@ -695,6 +708,14 @@ aerobag-platform/
 | Konu | v2 | v2.1 | Gerekçe |
 | --- | --- | --- | --- |
 | .NET sürümü | .NET 9 / ASP.NET Core 9 | .NET 10 LTS / ASP.NET Core 10 | .NET 8 ve 9, 10 Kasım 2026'da destek dışı kalıyor; .NET 10 Kasım 2028'e kadar destekli |
+
+### v2.1 → v2.2
+
+| Konu | v2.1 | v2.2 | Gerekçe |
+| --- | --- | --- | --- |
+| Konumlandırma | Havayolu, yer hizmetleri ve havalimanı için ortak platform | Havayolunun tek istasyon modülü; yer hizmetleri ve havalimanı veri sağlayan taraf | Bavulun sorumluluğu ve yolcu verisi havayolunda; IATA 753 takibi havayollarından ister |
+| Çıkış doğrulama | Faz 4'ün ana çıktısı | İsteğe bağlı havalimanı modülü | Kapıya cihaz ve personel koymak havalimanının kararıdır (REMEDIATION_PLAN, W11) |
+| Amaç | Takip, aralık tahmini, SLA, çıkış doğrulama | Kayıp ve bağlantıyı kaçıran bavul tespiti eklendi | Faz 6'da yapıldı (W4, W10a) |
 
 ---
 

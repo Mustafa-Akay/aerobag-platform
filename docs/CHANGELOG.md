@@ -4,6 +4,13 @@ Her iş paketinin ne yaptığı, neden yaptığı, bilinen sınırları ve testl
 
 Bu girdiler yazıldıkları andaki durumu anlatır; sonraki bir paket bir sınırı kapatmış olabilir (örneğin W4'te "W12'ye not edildi" denen jeton kapsamı W12a'da kapandı). W1 öncesindeki girdilerdeki "şema değişti, `docker compose down -v` gerekir" notları kaldırıldı: şema artık göçlerle güncellenir, veri korunur.
 
+## Toparlama, T1: havayolu çerçevesi
+
+- **Karar (31 Ekim):** AeroBag bir havalimanı platformu olarak değil, bir **havayolunun bavul takip sisteminin tek istasyon modülü** olarak konumlanır. Gerekçe: bavul kaybolduğunda sorumlu olan ve yolcunun başvurduğu taraf havayoludur, PNR onun sistemindedir, IATA 753 takibi havayollarından ister. Yer hizmetleri ve havalimanı veri sağlayan taraftır.
+- **Cevap verilen üç soru:** bavul uçağa bindi mi; aktarma bavulu bağlantıya yetişecek mi; yolcu bavulunu ne zaman alacak. İlk/son bavul teslim hedefi üçüncü sorunun istasyon tarafıdır.
+- **Değişen:** README girişi ve öne çıkanların sırası (kayıp bavul uyarısı ve okuma kapsamı öne; ExitGuard "isteğe bağlı modül" olarak sona). `ARCHITECTURE.md` v2.2: konumlandırma ve taraflar tablosu, amaçlara kayıp ve bağlantıyı kaçıran bavul, kapsam dışına çok istasyonlu ağ ve kayıp bavul dosyası süreci. Kod değişmedi.
+- **Ertelenen:** istasyon boyutu, aktarmanın varış tarafı ve W10b; yeni özellik yok kararı sürüyor, ağa genişleme görüşmelerden sonra.
+
 ## Faz 6, W12: ortak veritabanı yardımcıları ve belge sadeleştirme
 
 - **Ortak yardımcılar (PR #14):** `Infrastructure/Db/` altında `DbParams` (`P`, `V`, `PB`, `J`, `Cmd`, `ExecAsync`), `Outbox` ve `OutboxTopics`, `AdvisoryLock` (`etiket|uçuş` anahtarı tek yerde) ve `ReaderExtensions` (boş olabilen sütunlar). Üç sınıftaki özel kopyalar, altı outbox yazımı, üç bavul kilidi ve ~30 `IsDBNull ? null : …` satırı bunlara taşındı. Davranış aynı; tek fark: `ExitDeadlineService` komutları artık iptal belirtecini iletiyor (önceden yok sayılıyordu).

@@ -4,6 +4,7 @@ using AeroBag.Application.Eta;
 using AeroBag.Application.Ml;
 using AeroBag.Application.Time;
 using AeroBag.Domain;
+using AeroBag.Infrastructure.Db;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -118,17 +119,17 @@ public sealed class PassengerQueries(
             {
                 rows.Add(new Row(
                     r.GetString(0).Trim(), r.GetString(1), r.GetString(2),
-                    r.IsDBNull(3) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(3),
-                    r.IsDBNull(4) ? null : r.GetString(4),
-                    r.IsDBNull(5) ? null : r.GetString(5),
-                    r.IsDBNull(6) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(6),
+                    r.GetNullableDateTimeOffset(3),
+                    r.GetNullableString(4),
+                    r.GetNullableString(5),
+                    r.GetNullableDateTimeOffset(6),
                     r.GetInt32(7),
                     r.GetBoolean(8),
-                    r.IsDBNull(9) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(9),
-                    r.IsDBNull(10) ? null : r.GetString(10),
-                    r.IsDBNull(11) ? null : r.GetString(11),
-                    r.IsDBNull(12) ? null : r.GetString(12).Trim(),
-                    r.IsDBNull(13) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(13)));
+                    r.GetNullableDateTimeOffset(9),
+                    r.GetNullableString(10),
+                    r.GetNullableString(11),
+                    r.GetNullableString(12)?.Trim(),
+                    r.GetNullableDateTimeOffset(13)));
             }
         }
 

@@ -2,8 +2,9 @@ using System.Text.Json;
 using AeroBag.Application.Coverage;
 using AeroBag.Application.TypeB;
 using AeroBag.Domain;
+using AeroBag.Infrastructure.Db;
 using Npgsql;
-using NpgsqlTypes;
+using static AeroBag.Infrastructure.Db.DbParams;
 
 namespace AeroBag.Infrastructure;
 
@@ -56,11 +57,7 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
-        await using (var lockCmd = Cmd(conn, tx, "SELECT pg_advisory_xact_lock(hashtextextended(@k, 0))",
-                         P("k", $"{ev.BagTag}|{flightId}")))
-        {
-            await lockCmd.ExecuteNonQueryAsync(ct);
-        }
+        await AdvisoryLock.ForBagAsync(conn, tx, ev.BagTag, flightId, ct);
 
         await using (var dupCmd = Cmd(conn, tx, "SELECT 1 FROM baggage_events WHERE idempotency_key = @k",
                          P("k", ev.IdempotencyKey)))
@@ -238,10 +235,7 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
                 outcome,
                 occurredAtUtc = ev.OccurredAtUtc,
             });
-            await using var ob = Cmd(conn, tx,
-                "INSERT INTO outbox_messages (id, topic, partition_key, payload, created_at_utc) VALUES (@id, 'baggage.events', @pk, @pl, @now)",
-                P("id", Guid.NewGuid()), P("pk", ev.BagTag), J("pl", outboxPayload), P("now", received));
-            await ob.ExecuteNonQueryAsync(ct);
+            await Outbox.InsertAsync(conn, tx, OutboxTopics.BaggageEvents, ev.BagTag, outboxPayload, received, ct);
 
             if (newState == BagState.ClaimedFromBelt)
             {
@@ -280,11 +274,7 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
         string onwardFlightId, bool handedOver, DateTimeOffset occurred, DateTimeOffset received, CancellationToken ct)
     {
         // Kilit sırası: bağlantı satırının kilidi zaten alındı; şimdi gelen satırınki (bkz. sınıf açıklaması).
-        await using (var lockCmd = Cmd(conn, tx, "SELECT pg_advisory_xact_lock(hashtextextended(@k, 0))",
-                         P("k", $"{tag}|{inboundFlightId}")))
-        {
-            await lockCmd.ExecuteNonQueryAsync(ct);
-        }
+        await AdvisoryLock.ForBagAsync(conn, tx, tag, inboundFlightId, ct);
 
         Guid inboundBagId;
         BagState inboundState;
@@ -344,10 +334,8 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
             })),
             P("occ", occurred), P("rec", received));
 
-        await ExecAsync(conn, tx, ct,
-            "INSERT INTO outbox_messages (id, topic, partition_key, payload, created_at_utc) VALUES (@id, 'baggage.events', @pk, @pl, @now)",
-            P("id", Guid.NewGuid()), P("pk", tag),
-            J("pl", JsonSerializer.Serialize(new
+        await Outbox.InsertAsync(conn, tx, OutboxTopics.BaggageEvents, tag,
+            JsonSerializer.Serialize(new
             {
                 bagTag = tag,
                 flightId = inboundFlightId,
@@ -355,14 +343,8 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
                 toState = "TRANSFERRED",
                 outcome,
                 occurredAtUtc = occurred,
-            })),
-            P("now", received));
-    }
-
-    private static async Task ExecAsync(NpgsqlConnection conn, NpgsqlTransaction tx, CancellationToken ct, string sql, params NpgsqlParameter[] parameters)
-    {
-        await using var cmd = Cmd(conn, tx, sql, parameters);
-        await cmd.ExecuteNonQueryAsync(ct);
+            }),
+            received, ct);
     }
 
     private async Task DeadLetterAsync(string source, string? rawText, string error, CancellationToken ct)
@@ -383,20 +365,4 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
         cmd.Parameters.Add(P("err", error));
         await cmd.ExecuteNonQueryAsync(ct);
     }
-
-    private static NpgsqlCommand Cmd(NpgsqlConnection conn, NpgsqlTransaction tx, string sql, params NpgsqlParameter[] parameters)
-    {
-        var cmd = new NpgsqlCommand(sql, conn, tx);
-        cmd.Parameters.AddRange(parameters);
-        return cmd;
-    }
-
-    private static NpgsqlParameter P(string name, object? value) => new(name, value ?? DBNull.Value);
-
-    /// <summary>Boş olabilen metin parametresi (tipi açık: COALESCE içinde de doğru çözülür).</summary>
-    private static NpgsqlParameter V(string name, string? value) => new(name, NpgsqlDbType.Varchar) { Value = (object?)value ?? DBNull.Value };
-
-    private static NpgsqlParameter PB(string name, byte[] bytes) => new(name, NpgsqlDbType.Bytea) { Value = bytes };
-
-    private static NpgsqlParameter J(string name, string json) => new(name, NpgsqlDbType.Jsonb) { Value = json };
 }

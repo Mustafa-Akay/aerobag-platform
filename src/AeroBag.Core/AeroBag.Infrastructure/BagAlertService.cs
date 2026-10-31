@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AeroBag.Application.Alerts;
 using AeroBag.Application.Time;
+using AeroBag.Infrastructure.Db;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -94,8 +95,8 @@ public sealed class BagAlertService(NpgsqlDataSource db, AlertPolicy policy, IOp
             while (await r.ReadAsync(ct))
             {
                 var c = new Candidate(r.GetGuid(0), r.GetString(1).Trim(), r.GetString(2), r.GetString(3),
-                    r.IsDBNull(4) ? null : r.GetFieldValue<DateTimeOffset>(4),
-                    r.IsDBNull(5) ? null : r.GetFieldValue<DateTimeOffset>(5));
+                    r.GetNullableDateTimeOffset(4),
+                    r.GetNullableDateTimeOffset(5));
                 candidates[c.BagId] = c;
             }
         }
@@ -153,15 +154,9 @@ public sealed class BagAlertService(NpgsqlDataSource db, AlertPolicy policy, IOp
             if (changed)
             {
                 // İçeriksiz bildirim (bkz. LiveHub): yolcu ve operasyon ekranı güncel durumu mevcut uçlardan çeker.
-                await using var ob = new NpgsqlCommand(
-                    "INSERT INTO outbox_messages (id, topic, partition_key, payload) VALUES (@id, 'bag.alerts', @pk, @pl)", conn, tx);
-                ob.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Uuid) { Value = Guid.NewGuid() });
-                ob.Parameters.Add(new NpgsqlParameter("pk", NpgsqlDbType.Varchar) { Value = c.Tag });
-                ob.Parameters.Add(new NpgsqlParameter("pl", NpgsqlDbType.Jsonb)
-                {
-                    Value = JsonSerializer.Serialize(new { bagTag = c.Tag, flightId = c.FlightId, alert = wanted }),
-                });
-                await ob.ExecuteNonQueryAsync(ct);
+                await Outbox.InsertAsync(conn, tx, OutboxTopics.BagAlerts, c.Tag,
+                    JsonSerializer.Serialize(new { bagTag = c.Tag, flightId = c.FlightId, alert = wanted }),
+                    createdAtUtc: null, ct);
             }
         }
 

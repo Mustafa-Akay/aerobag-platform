@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AeroBag.Application.Ml;
+using AeroBag.Infrastructure.Db;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -60,15 +61,9 @@ public sealed class FlightContextStore(NpgsqlDataSource db)
             }
 
             // Bildirim içeriksizdir (bkz. LiveHub): istemci yeni bandı mevcut uçlardan yeniden çeker.
-            await using var ob = new NpgsqlCommand(
-                "INSERT INTO outbox_messages (id, topic, partition_key, payload) VALUES (@oid, 'flight.context', @id, @pl)", conn, tx);
-            ob.Parameters.Add(new NpgsqlParameter("oid", NpgsqlDbType.Uuid) { Value = Guid.NewGuid() });
-            ob.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Varchar) { Value = c.FlightId });
-            ob.Parameters.Add(new NpgsqlParameter("pl", NpgsqlDbType.Jsonb)
-            {
-                Value = JsonSerializer.Serialize(new { flightId = c.FlightId, carousel = c.Carousel, previousCarousel = previous, bagTags = tags }),
-            });
-            await ob.ExecuteNonQueryAsync(ct);
+            await Outbox.InsertAsync(conn, tx, OutboxTopics.FlightContext, c.FlightId,
+                JsonSerializer.Serialize(new { flightId = c.FlightId, carousel = c.Carousel, previousCarousel = previous, bagTags = tags }),
+                createdAtUtc: null, ct);
         }
 
         await tx.CommitAsync(ct);
@@ -91,7 +86,7 @@ public sealed class FlightContextStore(NpgsqlDataSource db)
         {
             var c = new FlightContext(r.GetString(0), r.GetFieldValue<DateTimeOffset>(1), r.GetBoolean(2), r.GetBoolean(3),
                 r.GetInt32(4), r.GetDouble(5), r.GetDouble(6), r.GetDouble(7), r.GetInt32(8), r.GetString(9),
-                r.IsDBNull(10) ? null : r.GetString(10));
+                r.GetNullableString(10));
             result[c.FlightId] = c;
         }
         return result;

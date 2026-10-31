@@ -1,5 +1,6 @@
 using AeroBag.Application.Coverage;
 using AeroBag.Application.Time;
+using AeroBag.Infrastructure.Db;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -66,7 +67,7 @@ public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = n
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
             {
-                times[r.GetString(0)] = (r.GetInt32(1), Ts(r, 2), Ts(r, 3), Ts(r, 4));
+                times[r.GetString(0)] = (r.GetInt32(1), r.GetNullableDateTimeOffset(2), r.GetNullableDateTimeOffset(3), r.GetNullableDateTimeOffset(4));
             }
         }
 
@@ -128,8 +129,8 @@ public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = n
                 var id = r.GetString(0);
                 times.TryGetValue(id, out var t);
                 // Bant okuması yoksa AODB'nin uçuş düzeyi zamanları.
-                var firstBelt = t.FirstCarousel ?? Ts(r, 11);
-                var lastBelt = t.LastCarousel ?? Ts(r, 12);
+                var firstBelt = t.FirstCarousel ?? r.GetNullableDateTimeOffset(11);
+                var lastBelt = t.LastCarousel ?? r.GetNullableDateTimeOffset(12);
                 double? firstBagMinutes = t.FirstUnload is { } u && firstBelt is { } c
                     ? Math.Round((c - u).TotalMinutes, 1)
                     : null;
@@ -137,13 +138,10 @@ public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = n
                 result.Add(new FlightSummary(id, r.GetInt32(1), r.GetInt32(2), r.GetInt32(3), r.GetInt32(4), r.GetInt32(5),
                     t.Anomalies, t.FirstUnload, firstBelt, lastBelt, firstBagMinutes,
                     stalledCount, r.GetInt32(6), r.GetInt32(7), r.GetInt32(8),
-                    r.IsDBNull(9) ? null : r.GetString(9), r.GetInt32(10), r.GetInt32(13)));
+                    r.GetNullableString(9), r.GetInt32(10), r.GetInt32(13)));
             }
         }
 
         return result;
     }
-
-    private static DateTimeOffset? Ts(NpgsqlDataReader r, int i) =>
-        r.IsDBNull(i) ? null : r.GetFieldValue<DateTimeOffset>(i);
 }

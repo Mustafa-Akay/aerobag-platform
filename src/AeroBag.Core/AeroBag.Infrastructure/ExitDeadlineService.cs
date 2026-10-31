@@ -1,7 +1,9 @@
 using System.Text.Json;
 using AeroBag.Application.Time;
+using AeroBag.Infrastructure.Db;
 using Npgsql;
 using NpgsqlTypes;
+using static AeroBag.Infrastructure.Db.DbParams;
 
 namespace AeroBag.Infrastructure;
 
@@ -49,24 +51,25 @@ public sealed class ExitDeadlineService(NpgsqlDataSource db, TimeProvider clock,
         }
 
         var overdue = 0;
-        var received = clock.GetUtcNow().UtcDateTime;
+        var receivedAt = clock.GetUtcNow();
+        var received = receivedAt.UtcDateTime;
         foreach (var d in due)
         {
             // Bavul bu arada başka bir duruma geçtiyse (okuma geç işlendi) yalnızca kaydı kapat.
             if (d.State != "CLAIMED_FROM_BELT")
             {
-                await ExecAsync(conn, tx, "UPDATE exit_deadlines SET status = 'CLEARED' WHERE bag_id = @id",
+                await ExecAsync(conn, tx, ct, "UPDATE exit_deadlines SET status = 'CLEARED' WHERE bag_id = @id",
                     new NpgsqlParameter("id", NpgsqlDbType.Uuid) { Value = d.BagId });
                 continue;
             }
 
-            await ExecAsync(conn, tx,
+            await ExecAsync(conn, tx, ct,
                 "UPDATE bags SET current_state = 'EXIT_OVERDUE', state_version = state_version + 1, updated_at_utc = @now WHERE bag_id = @id",
                 new NpgsqlParameter("now", NpgsqlDbType.TimestampTz) { Value = received },
                 new NpgsqlParameter("id", NpgsqlDbType.Uuid) { Value = d.BagId });
 
             // Tekil anahtar: aynı bavul için bu olay iki kez yazılamaz.
-            await ExecAsync(conn, tx,
+            await ExecAsync(conn, tx, ct,
                 """
                 INSERT INTO baggage_events (event_id, idempotency_key, bag_id, message_type, from_state, to_state, outcome,
                                             scanner_id, source, raw_text, payload, occurred_at_utc, received_at_utc)
@@ -80,30 +83,20 @@ public sealed class ExitDeadlineService(NpgsqlDataSource db, TimeProvider clock,
                 new NpgsqlParameter("occ", NpgsqlDbType.TimestampTz) { Value = d.DueAt.UtcDateTime },
                 new NpgsqlParameter("rec", NpgsqlDbType.TimestampTz) { Value = received });
 
-            await ExecAsync(conn, tx,
-                "INSERT INTO outbox_messages (id, topic, partition_key, payload, created_at_utc) VALUES (@id, 'baggage.events', @pk, @pl, @now)",
-                new NpgsqlParameter("id", NpgsqlDbType.Uuid) { Value = Guid.NewGuid() },
-                new NpgsqlParameter("pk", NpgsqlDbType.Varchar) { Value = d.Tag },
-                new NpgsqlParameter("pl", NpgsqlDbType.Jsonb) { Value = JsonSerializer.Serialize(new
+            await Outbox.InsertAsync(conn, tx, OutboxTopics.BaggageEvents, d.Tag,
+                JsonSerializer.Serialize(new
                 {
                     bagTag = d.Tag, flightId = d.FlightId, fromState = "CLAIMED_FROM_BELT", toState = "EXIT_OVERDUE",
                     outcome = "APPLIED", occurredAtUtc = d.DueAt,
-                }) },
-                new NpgsqlParameter("now", NpgsqlDbType.TimestampTz) { Value = received });
+                }),
+                receivedAt, ct);
 
-            await ExecAsync(conn, tx, "UPDATE exit_deadlines SET status = 'OVERDUE' WHERE bag_id = @id",
+            await ExecAsync(conn, tx, ct, "UPDATE exit_deadlines SET status = 'OVERDUE' WHERE bag_id = @id",
                 new NpgsqlParameter("id", NpgsqlDbType.Uuid) { Value = d.BagId });
             overdue++;
         }
 
         await tx.CommitAsync(ct);
         return overdue;
-    }
-
-    private static async Task ExecAsync(NpgsqlConnection conn, NpgsqlTransaction tx, string sql, params NpgsqlParameter[] ps)
-    {
-        await using var cmd = new NpgsqlCommand(sql, conn, tx);
-        cmd.Parameters.AddRange(ps);
-        await cmd.ExecuteNonQueryAsync();
     }
 }

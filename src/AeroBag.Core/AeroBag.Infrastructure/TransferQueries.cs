@@ -1,5 +1,6 @@
 using AeroBag.Application.Time;
 using AeroBag.Application.Transfer;
+using AeroBag.Infrastructure.Db;
 using Npgsql;
 
 namespace AeroBag.Infrastructure;
@@ -58,8 +59,8 @@ public sealed class TransferQueries(NpgsqlDataSource db, TransferPolicy? policy 
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
-            DateTimeOffset? std = r.IsDBNull(1) ? null : r.GetFieldValue<DateTimeOffset>(1);
-            DateTimeOffset? departed = r.IsDBNull(2) ? null : r.GetFieldValue<DateTimeOffset>(2);
+            DateTimeOffset? std = r.GetNullableDateTimeOffset(1);
+            DateTimeOffset? departed = r.GetNullableDateTimeOffset(2);
             var cutoff = _policy.CutoffFor(std);
             double? toCutoff = cutoff is { } c && now is { } n ? Math.Round((c - n).TotalMinutes, 1) : null;
             result.Add(new TransferFlightSummary(r.GetString(0), std, cutoff, departed, toCutoff,

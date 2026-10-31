@@ -1,8 +1,10 @@
 using System.Text.Json;
 using AeroBag.Application.ExitGuard;
 using AeroBag.Domain;
+using AeroBag.Infrastructure.Db;
 using Npgsql;
 using NpgsqlTypes;
+using static AeroBag.Infrastructure.Db.DbParams;
 
 namespace AeroBag.Infrastructure;
 
@@ -73,10 +75,7 @@ public sealed class GateService(NpgsqlDataSource db, LookupKeyHasher hasher, Exi
             return new GateTagResult(tag, UnknownTag, null);
         }
 
-        await using (var lockCmd = Cmd(conn, tx, "SELECT pg_advisory_xact_lock(hashtextextended(@k, 0))", P("k", $"{tag}|{flightId}")))
-        {
-            await lockCmd.ExecuteNonQueryAsync(ct);
-        }
+        await AdvisoryLock.ForBagAsync(conn, tx, tag, flightId!, ct);
 
         await using (var dup = Cmd(conn, tx, "SELECT 1 FROM gate_reads WHERE idempotency_key = @k", P("k", ik)))
         {
@@ -98,7 +97,7 @@ public sealed class GateService(NpgsqlDataSource db, LookupKeyHasher hasher, Exi
             await using var r = await sel.ExecuteReaderAsync(ct);
             await r.ReadAsync(ct);
             current = StateNames.FromDb(r.GetString(0)) ?? throw new InvalidOperationException("Bavulun durumu tanınmadı.");
-            ownerKey = r.IsDBNull(1) ? null : r.GetFieldValue<byte[]>(1);
+            ownerKey = r.GetNullableBytes(1);
         }
 
         var verdict = ExitGuardRules.Decide(current, ownerKey, presented, scan.SignalQuality, options.MinSignalQuality,
@@ -179,12 +178,7 @@ public sealed class GateService(NpgsqlDataSource db, LookupKeyHasher hasher, Exi
             outcome,
             occurredAtUtc = scan.TimestampUtc,
         });
-        await using (var ob = Cmd(conn, tx,
-                         "INSERT INTO outbox_messages (id, topic, partition_key, payload, created_at_utc) VALUES (@id, 'baggage.events', @pk, @pl, @now)",
-                         P("id", Guid.NewGuid()), P("pk", tag), J("pl", outboxPayload), P("now", now)))
-        {
-            await ob.ExecuteNonQueryAsync(ct);
-        }
+        await Outbox.InsertAsync(conn, tx, OutboxTopics.BaggageEvents, tag, outboxPayload, now, ct);
 
         await using (var dl = Cmd(conn, tx, "UPDATE exit_deadlines SET status = @st WHERE bag_id = @id AND status IN ('PENDING', 'OVERDUE')",
                          P("st", newState == BagState.ExitCleared ? "CLEARED" : "REVIEW"), P("id", bagId)))
@@ -222,17 +216,6 @@ public sealed class GateService(NpgsqlDataSource db, LookupKeyHasher hasher, Exi
             P("r", reason), P("occ", scan.TimestampUtc));
         await cmd.ExecuteNonQueryAsync(ct);
     }
-
-    private static NpgsqlCommand Cmd(NpgsqlConnection conn, NpgsqlTransaction tx, string sql, params NpgsqlParameter[] parameters)
-    {
-        var cmd = new NpgsqlCommand(sql, conn, tx);
-        cmd.Parameters.AddRange(parameters);
-        return cmd;
-    }
-
-    private static NpgsqlParameter P(string name, object? value) => new(name, value ?? DBNull.Value);
-
-    private static NpgsqlParameter J(string name, string json) => new(name, NpgsqlDbType.Jsonb) { Value = json };
 }
 
 public sealed record ExitReviewView(
@@ -262,10 +245,9 @@ public sealed class SecurityReviews(NpgsqlDataSource db, TimeProvider clock)
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
-            list.Add(new ExitReviewView(r.GetGuid(0), r.GetString(1).Trim(), r.IsDBNull(2) ? null : r.GetString(2), r.GetString(3),
-                r.GetString(4), r.GetFieldValue<DateTimeOffset>(5), r.GetString(6), r.IsDBNull(7) ? null : r.GetString(7),
-                r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetFieldValue<DateTimeOffset>(9),
-                r.IsDBNull(10) ? null : r.GetString(10)));
+            list.Add(new ExitReviewView(r.GetGuid(0), r.GetString(1).Trim(), r.GetNullableString(2), r.GetString(3),
+                r.GetString(4), r.GetFieldValue<DateTimeOffset>(5), r.GetString(6), r.GetNullableString(7),
+                r.GetNullableString(8), r.GetNullableDateTimeOffset(9), r.GetNullableString(10)));
         }
         return list;
     }

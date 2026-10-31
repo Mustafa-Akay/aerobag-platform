@@ -1,4 +1,5 @@
 using AeroBag.Application.Time;
+using AeroBag.Infrastructure.Db;
 using Npgsql;
 
 namespace AeroBag.Infrastructure;
@@ -17,6 +18,6 @@ public sealed class EventDerivedClock(NpgsqlDataSource db) : IOperationalClock
         await using var cmd = db.CreateCommand("SELECT max(occurred_at_utc) FROM baggage_events WHERE message_type <> 'BSM'");
         await using var r = await cmd.ExecuteReaderAsync(ct);
         await r.ReadAsync(ct);
-        return r.IsDBNull(0) ? null : r.GetFieldValue<DateTimeOffset>(0);
+        return r.GetNullableDateTimeOffset(0);
     }
 }

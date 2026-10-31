@@ -1,6 +1,7 @@
 using AeroBag.Application.Ml;
 using AeroBag.Application.Sla;
 using AeroBag.Application.Time;
+using AeroBag.Infrastructure.Db;
 using Npgsql;
 
 namespace AeroBag.Infrastructure;
@@ -74,10 +75,10 @@ public sealed class SlaQueries(NpgsqlDataSource db, IMlPredictor ml, IOperationa
             while (await r.ReadAsync(ct))
             {
                 rows.Add(new Row(r.GetString(0), r.GetInt32(1), r.GetInt32(2), r.GetInt32(3), r.GetInt32(4),
-                    r.IsDBNull(5) ? null : r.GetFieldValue<DateTimeOffset>(5),
-                    r.IsDBNull(6) ? null : r.GetFieldValue<DateTimeOffset>(6),
-                    r.IsDBNull(7) ? null : r.GetFieldValue<DateTimeOffset>(7),
-                    r.IsDBNull(8) ? null : r.GetFieldValue<DateTimeOffset>(8)));
+                    r.GetNullableDateTimeOffset(5),
+                    r.GetNullableDateTimeOffset(6),
+                    r.GetNullableDateTimeOffset(7),
+                    r.GetNullableDateTimeOffset(8)));
             }
         }
 

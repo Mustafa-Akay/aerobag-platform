@@ -160,4 +160,5 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W11 ExitGuard maliyeti | Kapsam dışı (gerekçe yukarıda) |
 | W12a Yolcu jetonunun kapsamı | Tamam (PR birleştirildi) |
 | W12 Temizlik ve belgeler (kalanı) | Tamam (PR #14 ortak DB yardımcıları, PR #15 `IMPLEMENTATION_STATUS` + `CHANGELOG`) |
-| Toparlama T1: havayolu çerçevesi (README, ARCHITECTURE v2.2) | Bu dalda (`faz6/t1-cerceve`) |
+| Toparlama T1: havayolu çerçevesi (README, ARCHITECTURE v2.2) | Tamam (PR #16) |
+| Toparlama T2: tek komutla çalıştırma (`scripts\demo`) | Bu dalda (`faz6/t2-demo-script`) |

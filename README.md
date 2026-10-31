@@ -69,6 +69,17 @@ Ayrıntılı tasarım [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)'de.
 
 Gereksinimler: .NET 10 SDK, Docker Desktop, Node 20+.
 
+**Tek komutla:**
+
+```powershell
+scripts\demo              # açar: Postgres + ML, göç, API, arayüz, simülatör (ayrı pencerelerde), tarayıcı
+scripts\demo -Stop        # hepsini kapatır, arkada süreç bırakmaz (veri korunur)
+```
+
+Betik önce Docker motorunu, Windows'un ayırabileceği belleği ve 5080/5173 portlarını denetler; sonra servisleri sırayla açar ve her birinin hazır olmasını bekler. Seçenekler: `-Coverage typical|minimal`, `-Speed`, `-Seed`, `-NoSimulator`, `-NoBuild` (ayrıntı: `Get-Help scripts\demo.ps1 -Detailed`).
+
+**Elle, adım adım:**
+
 ```powershell
 docker compose up -d --build                                          # PostgreSQL (5433) + ML servisi (127.0.0.1:8000)
 dotnet run --project src\AeroBag.Core\AeroBag.Migrator                # şemayı kurar / günceller (db/migrations)

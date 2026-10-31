@@ -4,6 +4,16 @@ Her iş paketinin ne yaptığı, neden yaptığı, bilinen sınırları ve testl
 
 Bu girdiler yazıldıkları andaki durumu anlatır; sonraki bir paket bir sınırı kapatmış olabilir (örneğin W4'te "W12'ye not edildi" denen jeton kapsamı W12a'da kapandı). W1 öncesindeki girdilerdeki "şema değişti, `docker compose down -v` gerekir" notları kaldırıldı: şema artık göçlerle güncellenir, veri korunur.
 
+## Toparlama, T2: tek komutla çalıştırma
+
+- **Sorun:** demoyu açmak beş komut, dört pencere ve doğru sıra gerektiriyordu. 31 Ekim'de iki tuzak yaşandı: takılan Docker motoru testleri dakikalarca bekletti; kapanmamış süreçler Windows'un bellek sınırını doldurdu, Node `Fatal process out of memory: Zone` ile çöktü.
+- **`scripts\demo.ps1`** (ve onu çağıran `scripts\demo.cmd`):
+  - **Ön kontrol:** `docker`, `dotnet`, `npm`; Docker motoru; ayrılabilir bellek (1,5 GB altında durur, 3 GB altında uyarır); `.wslconfig` bellek sınırı; 5080 ve 5173 portları.
+  - **Açılış sırası:** `docker compose up --wait` → projeler sırayla derlenir (eşzamanlı `dotnet run` dosya kilidine takılmasın) → göç → API (`/health` 90 sn beklenir) → ML yoklaması (yalnızca uyarı) → arayüz (gerekirse `npm install`) → simülatör → tarayıcı.
+  - API, arayüz ve simülatör ayrı pencerelerde açılır; pencereler `.demo\pids.txt`'ye yazılır. `-Stop` onları alt süreçleriyle kapatır (`taskkill /T`), portu hâlâ tutan bir süreç varsa yalnızca bildirir (başka bir projenin olabilir), Docker servislerini durdurur (veri korunur).
+  - Seçenekler: `-Coverage` (API ve simülatör aynı profille açılır), `-Speed`, `-Seed`, `-NoSimulator`, `-NoBuild`, `-NoBrowser`, `-KeepDocker`.
+- **Doğrulama:** betik PowerShell ayrıştırıcısıyla denetlendi; yerel komut çıkış kodunun yakalanması ve Türkçe ayarda ondalık ayırıcı ayrıca sınandı. Uçtan uca deneme Windows'ta elle yapıldı (31 Ekim, otomatik testi yok): ön kontrol, üç pencere ve tarayıcı açıldı, yolcu sayfasında simülatörün PNR'ıyla sorgu çalıştı, `-Stop` pencereleri ve alt süreçleri kapattı.
+
 ## Toparlama, T1: havayolu çerçevesi
 
 - **Karar (31 Ekim):** AeroBag bir havalimanı platformu olarak değil, bir **havayolunun bavul takip sisteminin tek istasyon modülü** olarak konumlanır. Gerekçe: bavul kaybolduğunda sorumlu olan ve yolcunun başvurduğu taraf havayoludur, PNR onun sistemindedir, IATA 753 takibi havayollarından ister. Yer hizmetleri ve havalimanı veri sağlayan taraftır.

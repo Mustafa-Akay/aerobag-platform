@@ -2,7 +2,7 @@
 
 `ARCHITECTURE.md` hedef tasarımı anlatır. Bu belge **şu an çalışan kodu** özetler: ne çalışıyor, tasarımdan nerede ayrışıyor, ne bilinçli olarak yok. Çelişki olursa bu belge koda daha yakındır; kodla çelişirse kod geçerlidir. Her iş paketinin ayrıntılı anlatısı, bilinen sınırları ve testleri [CHANGELOG.md](CHANGELOG.md)'dedir.
 
-Son güncelleme: 31 Ekim 2026 (toparlama, T1).
+Son güncelleme: 31 Ekim 2026 (toparlama, T2).
 
 **Konum:** bir havayolunun bavul takip sisteminin tek istasyon modülü; yer hizmetleri ve havalimanı veri sağlayan taraf, ExitGuard isteğe bağlı havalimanı modülü (`ARCHITECTURE.md`, "Konumlandırma").
 
@@ -95,6 +95,8 @@ Simülatörün bütün seçenekleri: `dotnet run --project src\AeroBag.Core\Aero
 
 ## Yerelde çalıştırma
 
+Tek komutla: `scripts\demo` (açar), `scripts\demo -Stop` (kapatır). Elle:
+
 ```powershell
 docker compose up -d --build                                                    # Postgres (5433) + ML (127.0.0.1:8000)
 dotnet run --project src\AeroBag.Core\AeroBag.Migrator                          # şema (API'den önce)
@@ -107,3 +109,4 @@ dotnet test                                                                     
 - Şema değişince göç aracı yeniden çalıştırılır; veri korunur.
 - API'yi Postgres hazır olduktan sonra başlatın; hazır değilken gönderilen olaylar kaybolur ve sonraki olaylar "sıra dışı" görünür.
 - `dotnet test` birkaç dakikayı geçiyorsa önce Docker motorunun çalıştığını kontrol edin (`docker info`).
+- Node `Fatal process out of memory: Zone` hatası verirse Windows'un bellek sınırı (Görev Yöneticisi > Bellek > "Tamamlanan") dolmuştur: açık süreçleri kapatın ya da yeniden başlatın; `%USERPROFILE%\.wslconfig` içinde `[wsl2]` altına `memory=4GB` yazarak Docker'ın WSL belleğini sınırlayın. `scripts\demo` bunu açılıştan önce denetler.

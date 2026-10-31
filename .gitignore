@@ -11,3 +11,6 @@ data/synthetic/*.csv
 __pycache__/
 .pytest_cache/
 *.pyc
+
+# scripts/demo.ps1 durum dosyası (açılan pencereler)
+.demo/

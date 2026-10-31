@@ -7,6 +7,7 @@ using AeroBag.Application.Alerts;
 using AeroBag.Application.Coverage;
 using AeroBag.Application.Ml;
 using AeroBag.Application.Time;
+using AeroBag.Application.Transfer;
 using AeroBag.Application.TypeB;
 using AeroBag.Infrastructure;
 using AeroBag.Infrastructure.Migrations;
@@ -61,6 +62,16 @@ builder.Services.AddSingleton<FlightContextStore>();
 builder.Services.AddSingleton<PassengerQueries>();
 builder.Services.AddSingleton<OpsQueries>();
 builder.Services.AddSingleton<SlaQueries>();
+
+// Aktarma bavulu (Faz 6, W10a). Bavul kabul kapanışı planlanan kalkıştan bu kadar önce (DEMO varsayımı).
+var transferPolicy = new TransferPolicy(
+    TimeSpan.FromMinutes(builder.Configuration.GetValue("Transfer:CutoffMinutes", TransferPolicy.Default.Cutoff.TotalMinutes)));
+if (transferPolicy.Cutoff <= TimeSpan.Zero || transferPolicy.Cutoff > TimeSpan.FromHours(2))
+{
+    throw new InvalidOperationException("Transfer:CutoffMinutes 0 ile 120 arasında olmalı.");
+}
+builder.Services.AddSingleton(transferPolicy);
+builder.Services.AddSingleton<TransferQueries>();
 
 // Kayıp bavul tespiti (Faz 6, W4). Tolerans süreleri DEMO varsayımıdır; Alerts__NotLoadedGraceMinutes ile değiştirilebilir.
 var alertPolicy = new AlertPolicy(
@@ -324,12 +335,16 @@ app.MapPost("/v1/lookup", async (LookupRequest body, PassengerQueries queries, T
     }
 
     // Yolcu jetonu yalnızca bu sorgudaki bavullara, uçuşlarıyla birlikte erişim verir (canlı kanal ve /v1/bags için).
-    var issued = tokens.IssuePassenger(result.Bags.Select(b => (b.BagTag, b.FlightId)));
+    var issued = tokens.IssuePassenger(result.Bags.SelectMany(b => b.Keys()));
     return Results.Ok(new { asOfUtc = result.AsOfUtc, bags = result.Bags, accessToken = issued.AccessToken, expiresInSec = issued.ExpiresInSec });
 }).RequireRateLimiting("lookup");
 
 // Operasyon panosu: uçuş bazında sayaçlar. Yalnızca personel (ops, security).
 app.MapGet("/v1/flights", async (OpsQueries ops, CancellationToken ct) => Results.Ok(await ops.FlightsAsync(ct)))
+    .RequireAuthorization(Roles.StaffPolicy);
+
+// Aktarma bavulları (W10a): bağlantı uçuşu başına sayaçlar ve kabul kapanışı. Yalnızca personel.
+app.MapGet("/v1/transfers", async (TransferQueries transfers, CancellationToken ct) => Results.Ok(await transfers.FlightsAsync(ct)))
     .RequireAuthorization(Roles.StaffPolicy);
 
 // SLA ve gecikme riski (DEMO hedefleri): ilk/son bavul için hedef, gerçekleşen ya da tahmin, ihlal olasılığı.

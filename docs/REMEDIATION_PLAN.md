@@ -37,7 +37,7 @@ Dalga 3 (genişleme)  W8 Öncelikli bavul   W9 İngilizce arayüz   W10 Aktarma 
                      W11 ExitGuard maliyet analizi   W12 Temizlik ve belge sadeleştirme
 ```
 
-**Dalga 3 için kararlaştırılan sıra (30 Ekim):** W12a (yolcu jetonunun kapsamı, güvenlik) → W9 → W11 → W10 (önce ayrıntılı plan, büyük olasılıkla iki PR) → W12'nin kalanı → toparlama (demo senaryosu, README, tek sayfalık özet, gerçek veri planı). W8 bu sıranın sonunda yeniden değerlendirilir (aşağıda).
+**Dalga 3 için kararlaştırılan sıra (30 Ekim, 31 Ekim'de güncellendi):** W12a (yolcu jetonunun kapsamı, güvenlik) → W9 → W10a → W12'nin kalanı → toparlama (demo senaryosu, README, tek sayfalık özet, gerçek veri planı). W8 bu sıranın sonunda yeniden değerlendirilir (aşağıda).
 
 Dalga 0 önce yapılır, çünkü Dalga 1'deki her paket şemayı değiştirecek ve yeni zamanlanmış işler ekleyecek. Bunlar göç ve saat soyutlaması olmadan yapılırsa aynı borç büyür.
 
@@ -121,12 +121,15 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 - Yolcu sayfası ve bildirim metinleri için TR/EN sözlüğü ve dil seçici. Tarayıcı diline göre varsayılan. Personel ekranları ikinci adımda.
 
 #### W10. Aktarma bavulu (B10)
-- **Domain:** aktarma bavulunun yaşam döngüsü varışta başlar ve ileri uçuşa yüklemeyle biter (bugünkü durum makinesinde yalnızca başlangıç kuralı var).
-- **Application:** ileri uçuş bilgisi (BSM'deki ileri uçuş satırı) ve asgari bağlantı süresine göre "bağlantıyı kaçırma riski" uyarısı.
-- Büyük iş: W4 ve W5'ten sonra ayrıca planlanır.
+- **Neden:** SITA 2026 Baggage IT Insights'a göre 2025'te yanlış yönetilen bavulların %39'u aktarma kaynaklıdır (bir önceki yıl %41); tek başına en büyük neden. Antalya ağırlıklı olarak doğrudan uçuş alan bir havalimanıdır; aynı model bağlantılı uçuşları olan her havayolu ve hub için geçerlidir.
+- **W10a, veri ve akış:** aktarma bavulu iki bağlı satır (gelen uçuş ve bağlantı uçuşu; her biri yine `etiket@uçuş`). BSM'de `.I` (gelen uçuş) ve `.O` (bağlantı uçuşu), yeni okuma noktası `TRANSFER`. Durumlar `TRANSFER_SORTED` (bağlantı satırı) ve `TRANSFERRED` (gelen satır aktarmaya devredildi). Bağlantı uçuşunun planlanan kalkışı AODB kilometre taşıyla gelir; bavul kabul kapanışı ondan hesaplanır (demo varsayımı 15 dk). Yolcu kartı tek yolculuk; operasyon panosunda "Aktarma" sütunu ve bağlantı uçuşu bölümü. Simülatörde aktarma bavulları ve 20 dk'lık kalkış tarifesi.
+- **W10b, risk ve ölçüm (sonraya bırakıldı, 31 Ekim):** "bağlantıyı kaçırma riski" uyarısı (yalnızca personel; kalan aktarma süresinin kötümser tahmini kabul kapanışını geçiyor), uyarı tablosuna yazılan "bağlantı kaçırıldı", acil aktarma listesi ve `transfer-eval` modu. Ölçmeden önce yazılan hedef: kaçırılan bavulların en az %80'i kabul kapanışından en az 10 dk önce işaretlenmeli. W10a'ya yalnızca doğruluk düzeltmesi alındı: bağlantı uçağı kalktıysa ve bavul yüklenmediyse yolcu kartı bunu söyler (aksi halde "yüklenecek" demeye devam ediyordu).
+- **Sonraya bırakıldı (31 Ekim):** bağlantı uçuşunun varış tarafını izlemek (varışta indirme, bant, alındı). Bu kurulum aktarma havalimanındadır; varış tarafı başka bir havalimanının verisidir. Bir havayolu kurulumunda havayolları arası bavul mesajlarıyla gelir (IATA Resolution 753 dört noktada izleme ister, sonuncusu varışta yolcuya teslim). Bağlantı satırının durum zinciri bu adımları zaten içerir; eksik olan simülatör ve yolcu kartıdır. Toparlama aşamasında, sistem bir havayoluna da gösterilecekse ele alınacak. Şimdilik kartın son adımı yolcuya bavulunu hangi havalimanında alacağını söyler.
 
 #### W11. ExitGuard operasyon maliyeti (B11)
 - Kapı başına saatlik inceleme sayısı, personel süresi ve kuyruk etkisi için basit bir model. "Bu kapı hangi koşulda kurulmaya değer?" sorusuna eşik tablosu. Varsayılanlar açıkça demo varsayımı olarak işaretlenir.
+- **Kapsam dışı (30 Ekim):** çıkış kapısına cihaz ya da personel koymak havalimanı işletmesinin kararıdır; sistemi kullanacak bir havayolu ya da yer hizmetleri şirketi bu maliyeti taşımaz ve bu soruyu sormaz. ExitGuard kodda, havalimanı tarafında isteğe bağlı bir modül olarak kalır.
+- **İleride düşünülebilecek, sınırıyla:** yolcunun bant başında kendi telefonuyla bavul etiketini okutup "bu benim bavulum" doğrulaması yapması. Cihaz ve personel gerektirmez, okutma bir "bavul sahibine ulaştı" kaydı da olur. Sınırı: gönüllüdür; yanlış bavulu alan yolcu onu kendi bavulu sandığı için okutmaz, yani en çok yakalanması gereken durumu kaçırır. Okutmanın yokluğu bir şey ifade etmez, uyarıya dayanak olamaz.
 
 #### W12. Temizlik ve belge sadeleştirme (B12)
 - Ortak veritabanı yardımcıları tek yerde. `IMPLEMENTATION_STATUS.md` ikiye bölünür: kısa ve güncel bir durum belgesi ile ayrı bir değişiklik günlüğü (`CHANGELOG.md`).
@@ -151,8 +154,9 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W6 ML sözleşme testi | Tamam (PR birleştirildi) |
 | W7 Yük testi | Tamam (PR birleştirildi) |
 | W8 Öncelikli bavul | Ertelendi (sıranın sonunda yeniden değerlendirilecek) |
-| W9 İngilizce arayüz | Yolcu ekranı hazır, PR bekliyor (branch `faz6/w9-english-ui`); personel ekranları ikinci adım |
-| W10 Aktarma bavulu | Başlamadı |
-| W11 ExitGuard maliyeti | Başlamadı |
+| W9 İngilizce arayüz | Yolcu ekranı tamam (PR birleştirildi); personel ekranları ikinci adım |
+| W10a Aktarma bavulu: veri ve akış | Kod ve testler hazır, PR bekliyor (branch `faz6/w10a-transfer`) |
+| W10b Aktarma bavulu: risk ve ölçüm | Sonraya bırakıldı (yeni özellik yok kararı, 31 Ekim) |
+| W11 ExitGuard maliyeti | Kapsam dışı (gerekçe yukarıda) |
 | W12a Yolcu jetonunun kapsamı | Tamam (PR birleştirildi) |
 | W12 Temizlik ve belgeler (kalanı) | Başlamadı |

@@ -18,14 +18,18 @@ public sealed record BaggageEvent(
     string? ScanPoint,
     string MessageType,
     string? Surname,
-    string? CabinClass);
+    string? CabinClass,
+    string? InboundFlightId = null,
+    string? OnwardFlightId = null,
+    string? DestinationAirport = null);
 
 public static class BaggageEventMapper
 {
     /// <summary>
     /// BPM okuma noktası önekinden durum çıkarılır:
     /// SEC=güvenlik, LOAD=uçağa yükleme, CHUTE=şut girişi, CAROUSEL=bant ağzı, CLAIM=banttan alma,
-    /// EXIT=çıkış kapısında okuma. EXIT yalnızca "çıkışta okundu" bilgisidir; yolcu eşleştirmesi (PNR) yapılmaz (Faz 4).
+    /// EXIT=çıkış kapısında okuma, TRANSFER=aktarma hattı (W10a; bağlantı uçuşundaki satır).
+    /// EXIT yalnızca "çıkışta okundu" bilgisidir; yolcu eşleştirmesi (PNR) yapılmaz (Faz 4).
     /// </summary>
     public static bool TryMap(TypeBMessage m, DateTimeOffset receivedAtUtc, out BaggageEvent? result, out string? error)
     {
@@ -52,6 +56,7 @@ public static class BaggageEventMapper
                 else if (point.StartsWith("CAROUSEL", StringComparison.Ordinal)) state = BagState.OnCarousel;
                 else if (point.StartsWith("CLAIM", StringComparison.Ordinal)) state = BagState.ClaimedFromBelt;
                 else if (point.StartsWith("EXIT", StringComparison.Ordinal)) state = BagState.ExitCleared;
+                else if (point.StartsWith("TRANSFER", StringComparison.Ordinal)) state = BagState.TransferSorted;
                 else
                 {
                     error = $"Bilinmeyen okuma noktası: {point}";
@@ -71,7 +76,8 @@ public static class BaggageEventMapper
         var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
 
         result = new BaggageEvent(m.BagTag, m.Sequence, m.FlightNumber, m.FlightDate, m.Airport,
-            state, occurred, key, m.Pnr, m.ScanPoint, m.Kind.ToString().ToUpperInvariant(), m.Surname, m.CabinClass);
+            state, occurred, key, m.Pnr, m.ScanPoint, m.Kind.ToString().ToUpperInvariant(), m.Surname, m.CabinClass,
+            m.Inbound?.FlightId, m.Onward?.FlightId, m.DestinationAirport);
         return true;
     }
 }

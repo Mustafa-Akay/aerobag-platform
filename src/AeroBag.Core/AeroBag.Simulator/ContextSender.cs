@@ -47,6 +47,23 @@ public static class ContextSender
     /// AODB kilometre taşları (W4): kalkış ve varışta "indirme bitti". Gerçek AODB bunları olay anında gönderir; bu yüzden
     /// bavul mesajlarıyla aynı zaman çizelgesine konur (<see cref="LiveSender"/>, tür MILESTONE).
     /// </summary>
+    /// <summary>
+    /// Bağlantı uçuşlarının kilometre taşları (W10a): planlanan kalkış (ilk aktarma BSM'siyle birlikte) ve kalkış. Aynı bağlantı
+    /// uçuşu birden çok gelen uçuşta görünür; tek kez, en erken bildirim anıyla gönderilir.
+    /// </summary>
+    public static IEnumerable<ScheduledMessage> OnwardMilestones(IEnumerable<OnwardFlight> onward)
+    {
+        foreach (var g in onward.GroupBy(o => o.FlightId).OrderBy(g => g.Key, StringComparer.Ordinal))
+        {
+            var o = g.First();
+            var announced = g.Min(x => x.AnnouncedUtc);
+            yield return new ScheduledMessage(announced,
+                JsonSerializer.Serialize(new { flightId = o.FlightId, scheduledDepartureUtc = o.ScheduledDepartureUtc }, Json), "", "MILESTONE");
+            yield return new ScheduledMessage(o.DepartedUtc,
+                JsonSerializer.Serialize(new { flightId = o.FlightId, departedUtc = o.DepartedUtc }, Json), "", "MILESTONE");
+        }
+    }
+
     public static IEnumerable<ScheduledMessage> Milestones(FlightInfo f)
     {
         if (f.DepartedUtc is { } d)

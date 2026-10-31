@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, getAlerts, getFlights, getFlightSla, getMlStatus, type FlightSla, type FlightSummary, type MlStatus, type OpenAlert } from "../api";
+import {
+  ApiError,
+  getAlerts,
+  getFlights,
+  getFlightSla,
+  getMlStatus,
+  getTransfers,
+  type FlightSla,
+  type FlightSummary,
+  type MlStatus,
+  type OpenAlert,
+  type TransferFlight,
+} from "../api";
 import { AlertsPanel } from "../components/AlertsPanel";
 import { clearStaff, loadStaff, type StaffSession } from "../auth";
 import { StaffLogin } from "../components/StaffLogin";
 import { SecurityPanel } from "../components/SecurityPanel";
 import { SlaPanel } from "../components/SlaPanel";
+import { TransferPanel } from "../components/TransferPanel";
 import { clockTime, decimalMinutes } from "../format";
 import { useCoalescedTick, useLive } from "../live";
 
@@ -52,6 +65,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
   const [sla, setSla] = useState<FlightSla[] | null>(null);
   const [alerts, setAlerts] = useState<OpenAlert[] | null>(null);
   const [ml, setMl] = useState<MlStatus | null>(null);
+  const [transfers, setTransfers] = useState<TransferFlight[] | null>(null);
   const [error, setError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
@@ -83,6 +97,11 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
         } catch {
           if (!controller.signal.aborted) setMl(null);
         }
+        try {
+          setTransfers(await getTransfers(session.token, controller.signal));
+        } catch {
+          if (!controller.signal.aborted) setTransfers(null);
+        }
         setError(false);
         setUpdatedAt(new Date());
       } catch (e) {
@@ -113,7 +132,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
           </button>
         </p>
       </div>
-      <p className="mt-2 text-steel">Uçuş başına bagaj sayıları, ilk bagaj süresi ve sıra dışı olaylar. "Alındı" banttan alınan tüm bagajları sayar; çıkış sütunları bunların alt kümesidir. "Çıkış okunmadı" bir sonuç değil, inceleme gerektiren durumdur. "İncelemede": çıkışta bavul ile rezervasyon eşleşmedi. "Eksik": açık kayıp bavul uyarısı (aşağıdaki listede).</p>
+      <p className="mt-2 text-steel">Uçuş başına bagaj sayıları, ilk bagaj süresi ve sıra dışı olaylar. "Alındı" banttan alınan tüm bagajları sayar; çıkış sütunları bunların alt kümesidir. "Çıkış okunmadı" bir sonuç değil, inceleme gerektiren durumdur. "İncelemede": çıkışta bavul ile rezervasyon eşleşmedi. "Eksik": açık kayıp bavul uyarısı (aşağıdaki listede). "Aktarma": bağlantı uçuşuna giden bavullar; banda gelmedikleri için varış sütunlarına girmez, toplama girer.</p>
 
       {ml && <MlStatusLine status={ml} />}
 
@@ -127,7 +146,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
 
       {flights && flights.length > 0 && (
         <div className="mt-6 overflow-x-auto bg-ink p-1">
-          <table className="w-full min-w-[52rem] border-collapse text-left text-tag">
+          <table className="w-full min-w-[56rem] border-collapse text-left text-tag">
             <caption className="sr-only">Uçuş özetleri</caption>
             <thead>
               <tr className="text-sm text-signal">
@@ -138,6 +157,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Yolda</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Bantta</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Alındı</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Aktarma</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Çıkış okundu</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Çıkış okunmadı</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">İncelemede</th>
@@ -156,6 +176,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
                   <td className="px-3 py-2 text-right">{f.inbound}</td>
                   <td className="px-3 py-2 text-right">{f.onCarousel}</td>
                   <td className="px-3 py-2 text-right">{f.claimed}</td>
+                  <td className="px-3 py-2 text-right">{f.transfer}</td>
                   <td className="px-3 py-2 text-right">{f.exitRead}</td>
                   <td className={["px-3 py-2 text-right", f.exitOverdue > 0 ? "font-bold text-signal" : ""].join(" ")}>{f.exitOverdue}</td>
                   <td className={["px-3 py-2 text-right", f.exitReview > 0 ? "font-bold text-signal" : ""].join(" ")}>{f.exitReview}</td>
@@ -170,6 +191,7 @@ function OpsDashboard({ session, onExpired, onLogout }: { session: StaffSession;
       )}
       {session.role === "security" && <SecurityPanel token={session.token} onExpired={onExpired} />}
       {alerts && <AlertsPanel rows={alerts} />}
+      {transfers && <TransferPanel rows={transfers} />}
       {sla && sla.length > 0 && <SlaPanel rows={sla} />}
       {updatedAt && (
         <p className="mt-3 text-xs text-steel">

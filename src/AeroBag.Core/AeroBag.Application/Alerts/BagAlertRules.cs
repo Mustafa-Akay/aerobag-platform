@@ -52,16 +52,18 @@ public sealed record AlertPolicy(TimeSpan NotLoadedGrace, TimeSpan MissingGrace)
 /// <summary>
 /// AODB kilometre taşları. Alanlardan en az biri verilir; verilmeyen alan kayıtlı değeri korur.
 /// İlk/son bavulun banda geliş zamanı (W5) yer hizmetinin uçuş düzeyinde bildirdiği değerdir; bant ağzında okuyucu
-/// olmayan kurulumlarda SLA bunlardan hesaplanır.
+/// olmayan kurulumlarda SLA bunlardan hesaplanır. Planlanan kalkış (W10a) buradan çıkan bağlantı uçuşları içindir; aktarma
+/// bavulunun kabul kapanışı bundan hesaplanır.
 /// </summary>
 public sealed record FlightMilestones(string FlightId, DateTimeOffset? DepartedUtc = null, DateTimeOffset? UnloadingCompletedUtc = null,
-    DateTimeOffset? FirstBagOnBeltUtc = null, DateTimeOffset? LastBagOnBeltUtc = null)
+    DateTimeOffset? FirstBagOnBeltUtc = null, DateTimeOffset? LastBagOnBeltUtc = null, DateTimeOffset? ScheduledDepartureUtc = null)
 {
     public string? Validate()
     {
         if (!Regex.IsMatch(FlightId ?? "", @"^[A-Z0-9\-]{1,40}\z")) return "flightId geçersiz.";
-        if (DepartedUtc is null && UnloadingCompletedUtc is null && FirstBagOnBeltUtc is null && LastBagOnBeltUtc is null)
-            return "en az bir zaman verilmeli (departedUtc, unloadingCompletedUtc, firstBagOnBeltUtc, lastBagOnBeltUtc).";
+        if (DepartedUtc is null && UnloadingCompletedUtc is null && FirstBagOnBeltUtc is null && LastBagOnBeltUtc is null
+            && ScheduledDepartureUtc is null)
+            return "en az bir zaman verilmeli (departedUtc, unloadingCompletedUtc, firstBagOnBeltUtc, lastBagOnBeltUtc, scheduledDepartureUtc).";
         if (DepartedUtc is { } d && UnloadingCompletedUtc is { } u && u <= d) return "unloadingCompletedUtc kalkıştan sonra olmalı.";
         if (FirstBagOnBeltUtc is { } f && LastBagOnBeltUtc is { } l && l < f) return "lastBagOnBeltUtc ilk bavuldan önce olamaz.";
         if (DepartedUtc is { } d2 && FirstBagOnBeltUtc is { } f2 && f2 <= d2) return "firstBagOnBeltUtc kalkıştan sonra olmalı.";
@@ -77,7 +79,7 @@ public sealed record FlightMilestones(string FlightId, DateTimeOffset? DepartedU
 /// </summary>
 public static class BagAlertRules
 {
-    private static bool PastArrival(BagState s) => s != BagState.OffloadedNoShow && (int)s >= (int)BagState.UnloadedAtArrival;
+    private static bool PastArrival(BagState s) => s != BagState.OffloadedNoShow && BagStateMachine.Rank(s) >= BagStateMachine.Rank(BagState.UnloadedAtArrival);
 
     /// <summary>Şu an geçerli olması gereken uyarı; yoksa null.</summary>
     public static string? Evaluate(BagState state, DateTimeOffset? departedUtc, DateTimeOffset? unloadingCompletedUtc,
@@ -88,7 +90,7 @@ public static class BagAlertRules
             return null;
         }
 
-        if ((int)state < (int)BagState.LoadedOnAircraft && departedUtc is { } d && now >= d + policy.NotLoadedGrace)
+        if (BagStateMachine.Rank(state) < BagStateMachine.Rank(BagState.LoadedOnAircraft) && departedUtc is { } d && now >= d + policy.NotLoadedGrace)
         {
             return BagAlertKind.NotLoaded;
         }
@@ -106,7 +108,7 @@ public static class BagAlertRules
     {
         if (state == BagState.OffloadedNoShow) return BagAlertCloseReason.Offloaded;
         var found = kind == BagAlertKind.NotLoaded
-            ? (int)state >= (int)BagState.LoadedOnAircraft
+            ? BagStateMachine.Rank(state) >= BagStateMachine.Rank(BagState.LoadedOnAircraft)
             : PastArrival(state);
         return found ? BagAlertCloseReason.Found : BagAlertCloseReason.Cleared;
     }
@@ -118,7 +120,7 @@ public static class BagAlertRules
     public static bool StillApplies(string kind, BagState state) =>
         state != BagState.OffloadedNoShow && kind switch
         {
-            BagAlertKind.NotLoaded => (int)state < (int)BagState.LoadedOnAircraft,
+            BagAlertKind.NotLoaded => BagStateMachine.Rank(state) < BagStateMachine.Rank(BagState.LoadedOnAircraft),
             BagAlertKind.MissingAtArrival => !PastArrival(state),
             _ => false,
         };
@@ -148,7 +150,7 @@ public static class BagAlertRules
     public static bool IsArrivalDelayed(BagState state, DateTimeOffset? onBlockUtc, bool anyBagUnloaded,
         int firstBagTargetSec, DateTimeOffset now) =>
         state != BagState.OffloadedNoShow
-        && (int)state < (int)BagState.UnloadedAtArrival
+        && BagStateMachine.Rank(state) < BagStateMachine.Rank(BagState.UnloadedAtArrival)
         && !anyBagUnloaded
         && onBlockUtc is { } ob
         && now >= ob.AddSeconds(firstBagTargetSec);

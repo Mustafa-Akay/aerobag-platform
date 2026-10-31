@@ -17,6 +17,16 @@ export type PassengerBag = {
   carousel: string | null;
   /** Kayıp/geciken bavul bildirimi (W4); yoksa null. */
   notice: BagNotice | null;
+  /**
+   * Aktarma bavulu (W10a): bağlantı uçuşu. Doluysa `state` gelen uçuştaki, `onwardState` bağlantı uçuşundaki durumdur
+   * (aktarma kaydı henüz gelmediyse null). Aktarma bavulunda bant ve varış tahmini yoktur.
+   */
+  onwardFlightId: string | null;
+  onwardState: string | null;
+  /** Bağlantı uçuşunun varış havalimanı (IATA kodu); takip burada biter, yolcu bavulunu orada alır. */
+  onwardDestination: string | null;
+  /** Bağlantı uçağı kalktı ve bavul ona yüklenmedi (olmuş bir olay; kabul kapanışının geçmesi yalnızca personele gösterilir). */
+  connectionMissed: boolean;
 };
 
 export type BagNotice = "NOT_LOADED" | "MISSING_AT_ARRIVAL" | "ARRIVAL_DELAYED" | "LIKELY_ON_BELT";
@@ -49,7 +59,29 @@ export type FlightSummary = {
   carousel: string | null;
   /** Açık kayıp bavul uyarısı sayısı. */
   openAlerts: number;
+  /** Bu uçuştan aktarmaya giden bavul sayısı (W10a); varış sayaçlarına girmez. */
+  transfer: number;
 };
+
+/** Bağlantı uçuşu başına aktarma bavulları (W10a). */
+export type TransferFlight = {
+  flightId: string;
+  scheduledDepartureUtc: string | null;
+  cutoffUtc: string | null;
+  departedUtc: string | null;
+  /** Operasyon saatine göre kabul kapanışına kalan dakika (geçtiyse eksi). */
+  minutesToCutoff: number | null;
+  total: number;
+  notArrived: number;
+  awaitingSort: number;
+  sorted: number;
+  loaded: number;
+  offloaded: number;
+};
+
+export function getTransfers(token: string, signal?: AbortSignal): Promise<TransferFlight[]> {
+  return getJson<TransferFlight[]>("/v1/transfers", signal, token);
+}
 
 export type OpenAlert = {
   bagTag: string;

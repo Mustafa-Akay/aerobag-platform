@@ -29,6 +29,32 @@ public static class FlightGenerator
 
     internal const string PnrChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
+    // Aktarma (W10a), hepsi demo varsayımıdır: gelen uçuşun kalktığı yer, bağlantı uçuşlarının gittiği yerler ve 20 dk'lık
+    // kalkış ızgarası. Bağlantı süresi (iniş → planlanan kalkış) 40-150 dk arası tekdüze; bir kısmı sıkışıktır.
+    // Aktarma hattı süresi indirmeden sonra 5 dk + log-normal (ortalama 10 dk), rejim B'de daha uzun; yükleme 3-8 dk sonra.
+    // Kabul kapanışı planlanan kalkıştan 15 dk önce (API'deki Transfer:CutoffMinutes varsayılanıyla aynı).
+    private static readonly string[] Origins = ["FRA", "DUS", "LHR", "AMS", "CDG"];
+    private static readonly string[] Destinations = ["ADB", "ESB", "IST", "SAW", "TZX", "GZT"];
+    internal static readonly TimeSpan OnwardSlot = TimeSpan.FromMinutes(20);
+    internal const double MinConnectionMinutes = 40;
+    internal const double MaxConnectionMinutes = 150;
+    internal static readonly TimeSpan TransferCutoff = TimeSpan.FromMinutes(15);
+    private const double TransferMinSeconds = 300;
+    private const double TransferMeanExtraSeconds = 600;
+    private const double TransferSigma = 0.5;
+
+    /// <summary>Tarife ızgarasında planlanan kalkışı <paramref name="desired"/>'dan sonraki ilk dilim olan bağlantı uçuşu.</summary>
+    internal static OnwardFlight OnwardFor(DateTimeOffset desired, SimOptions o, DateTimeOffset announced)
+    {
+        var slot = Math.Max(0, (int)Math.Ceiling((desired - o.StartUtc).TotalMinutes / OnwardSlot.TotalMinutes));
+        var std = o.StartUtc + slot * OnwardSlot;
+        var date = DateOnly.FromDateTime(std.UtcDateTime);
+        var number = $"ZZ{5000 + slot:D4}";
+        // Kalkış gecikmesi uçuşa özgüdür (aynı uçuş her gelen uçuşta aynı görünsün diye dilime bağlı ayrı akış).
+        var departed = std.AddMinutes(new SimRandom(unchecked(o.Seed * 7 + slot)).Uniform(0, 8));
+        return new OnwardFlight($"{number}-{date:yyyyMMdd}", number, date, Destinations[slot % Destinations.Length], std, departed, announced);
+    }
+
     public static FlightResult Generate(int index, SimOptions o, SimRandom rng)
     {
         var wide = rng.Chance(0.2);
@@ -123,6 +149,18 @@ public static class FlightGenerator
                     : null;
             }
         }
+        // W10a aktarma bavulları: yine ayrı akış; yalnızca akıbeti normal olan bavullar arasından seçilir.
+        var transferRng = o.TransferRate > 0 ? new SimRandom(unchecked(o.Seed * 50021 + index)) : null;
+        if (transferRng is not null)
+        {
+            for (var i = 0; i < bagCount; i++)
+            {
+                if (fates[i] is null && transferRng.Chance(o.TransferRate))
+                {
+                    fates[i] = BagFate.Transfer;
+                }
+            }
+        }
         var delivered = Enumerable.Range(0, bagCount).Where(i => fates[i] is null).ToList();
         if (delivered.Count == 0)
         {
@@ -133,7 +171,8 @@ public static class FlightGenerator
         // İlk/son bavul, indirme bitti: yalnızca gerçekten indirilen bavullar arasında.
         var firstIdx = delivered.MinBy(i => carouselT[i]);
         var lastIdx = delivered.MaxBy(i => carouselT[i]);
-        var unloadingCompleted = delivered.Max(i => unload[i]);
+        // Aktarma bavulları da indirilir (banda gitmeseler de); indirme bitti zamanına girerler.
+        var unloadingCompleted = Enumerable.Range(0, bagCount).Where(i => fates[i] is null or BagFate.Transfer).Max(i => unload[i]);
 
         var departure = onBlock.AddMinutes(-(210 + rng.Uniform(-10, 10)));
         var bags = new List<BagTruth>(bagCount);
@@ -144,6 +183,8 @@ public static class FlightGenerator
         // ana akış aynı kalır, yalnızca PNR değişir.
         var bookingRng = o.GatePackets ? new SimRandom(unchecked(o.Seed * 7919 + index)) : null;
         string? previousPnr = null;
+        var origin = Origins[index % Origins.Length];
+        var onwardFlights = new Dictionary<string, OnwardFlight>();
 
         for (var i = 0; i < bagCount; i++)
         {
@@ -161,11 +202,20 @@ public static class FlightGenerator
             var surname = rng.Pick(Surnames);
             var given = rng.Pick(Givens);
 
+            var weight = rng.Int(8, 31);
+            if (fates[i] == BagFate.Transfer)
+            {
+                var truth = AddTransfer(i, tag, weight, checkIn, security, loaded, unload[i], pnr, surname, given);
+                bags.Add(new BagTruth(flightId, tag, i, checkIn, security, loaded, unload[i], chute[i],
+                    carouselT[i], claim[i], false, false, pnr, surname, fates[i], truth));
+                continue;
+            }
+
             bags.Add(new BagTruth(flightId, tag, i, checkIn, security, loaded, unload[i], chute[i],
                 carouselT[i], claim[i], i == firstIdx, i == lastIdx, pnr, surname, fates[i]));
 
             messages.Add(new ScheduledMessage(checkIn,
-                MessageFormatter.Bsm(flightNumber, date, tag, rng.Int(8, 31), surname, given, pnr),
+                MessageFormatter.Bsm(flightNumber, date, tag, weight, surname, given, pnr),
                 tag, "BSM"));
             messages.Add(new ScheduledMessage(security,
                 MessageFormatter.Bpm(flightNumber, date, tag, "SEC01", security), tag, "SEC"));
@@ -187,6 +237,46 @@ public static class FlightGenerator
                 MessageFormatter.Bpm(flightNumber, date, tag, cc, carouselT[i]), tag, "CAROUSEL"));
             messages.Add(new ScheduledMessage(claim[i],
                 MessageFormatter.Bpm(flightNumber, date, tag, $"CLAIM{carousel:D2}", claim[i]), tag, "CLAIM"));
+        }
+
+        // Aktarma bavulu (W10a): gelen uçuşta BSM (.O ile), güvenlik, yükleme ve indirme; aynı anda bağlantı uçuşu için aktarma
+        // BSM'si (.I ile); indirmeden sonra aktarma hattı okuması ve kabul kapanışına yetişirse bağlantı uçağına yükleme.
+        TransferTruth AddTransfer(int i, string tag, int weight, DateTimeOffset checkIn, DateTimeOffset security, DateTimeOffset loaded,
+            DateTimeOffset unloaded, string pnr, string surname, string given)
+        {
+            var trng = transferRng!; // aktarma akıbeti yalnızca transferRng varken seçilir
+            var desired = onBlock.AddMinutes(trng.Uniform(MinConnectionMinutes, MaxConnectionMinutes));
+            var onward = OnwardFor(desired, o, checkIn);
+            if (!onwardFlights.TryGetValue(onward.FlightId, out var known) || onward.AnnouncedUtc < known.AnnouncedUtc)
+            {
+                onwardFlights[onward.FlightId] = onward;
+            }
+
+            var sort = unloaded.AddSeconds((TransferMinSeconds + trng.LogNormal(TransferMeanExtraSeconds, TransferSigma)) * load);
+            var cutoff = onward.ScheduledDepartureUtc - TransferCutoff;
+            var onwardLoad = sort.AddSeconds(trng.Uniform(180, 480));
+            DateTimeOffset? loadedOnward = onwardLoad <= cutoff ? onwardLoad : null;
+
+            var onwardRef = (onward.FlightNumber, onward.Date, onward.Destination);
+            messages.Add(new ScheduledMessage(checkIn,
+                MessageFormatter.Bsm(flightNumber, date, tag, weight, surname, given, pnr, onward: onwardRef), tag, "BSM"));
+            messages.Add(new ScheduledMessage(checkIn.AddSeconds(1),
+                MessageFormatter.Bsm(onward.FlightNumber, onward.Date, tag, weight, surname, given, pnr, onward.Destination,
+                    inbound: (flightNumber, date, origin)), tag, "TBSM"));
+            messages.Add(new ScheduledMessage(security,
+                MessageFormatter.Bpm(flightNumber, date, tag, "SEC01", security), tag, "SEC"));
+            messages.Add(new ScheduledMessage(loaded,
+                MessageFormatter.Bpm(flightNumber, date, tag, "LOAD02", loaded), tag, "LOAD"));
+            messages.Add(new ScheduledMessage(unloaded,
+                MessageFormatter.Bum(flightNumber, date, tag, stand, unloaded), tag, "BUM"));
+            messages.Add(new ScheduledMessage(sort,
+                MessageFormatter.Bpm(onward.FlightNumber, onward.Date, tag, "TRANSFER01", sort, destination: onward.Destination), tag, "TRANSFER"));
+            if (loadedOnward is { } lo)
+            {
+                messages.Add(new ScheduledMessage(lo,
+                    MessageFormatter.Bpm(onward.FlightNumber, onward.Date, tag, "LOAD01", lo, destination: onward.Destination), tag, "TLOAD"));
+            }
+            return new TransferTruth(onward.FlightId, onward.ScheduledDepartureUtc, cutoff, sort, loadedOnward);
         }
 
         if (o.ExitScans && o.GatePackets)
@@ -223,17 +313,18 @@ public static class FlightGenerator
         // Okuma kapsamı (W5): okuyucusu olmayan noktanın mesajı hiç oluşmaz. Gerçek zamanlar (BagTruth) değişmez.
         var coverage = o.Coverage ?? AeroBag.Application.Coverage.ReadCoverage.Full;
         var visible = messages.Where(m => IsCovered(m.Kind, coverage));
-        return new FlightResult(info, bags, visible.OrderBy(m => m.TimeUtc).ToList());
+        return new FlightResult(info, bags, visible.OrderBy(m => m.TimeUtc).ToList(),
+            onwardFlights.Values.OrderBy(x => x.ScheduledDepartureUtc).ToList());
     }
 
     private static bool IsCovered(string kind, AeroBag.Application.Coverage.ReadCoverage coverage) => kind switch
     {
         "SEC" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Security),
-        "LOAD" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Load),
+        "LOAD" or "TLOAD" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Load),
         "BUM" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Unload),
         "CHUTE" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Chute),
         "CAROUSEL" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Carousel),
         "CLAIM" => coverage.Has(AeroBag.Application.Coverage.ReadPoint.Claim),
-        _ => true, // BSM, çıkış kapısı (ExitGuard) ve BPM çıkış okuması kapsamdan bağımsızdır
+        _ => true, // BSM, aktarma BSM'si, aktarma hattı (W10a), çıkış kapısı (ExitGuard) ve BPM çıkış okuması kapsamdan bağımsızdır
     };
 }

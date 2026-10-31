@@ -55,7 +55,11 @@ export function PassengerPage() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const [tick, signal] = useCoalescedTick((60_000 / LOOKUP_LIMIT_PER_MIN) * 1.5);
-  const keys = useMemo(() => result?.bags.map((b) => bagKey(b.bagTag, b.flightId)) ?? [], [result]);
+  // Aktarma bavulunda iki satırın da (gelen ve bağlantı uçuşu) bildirimi dinlenir (W10a).
+  const keys = useMemo(
+    () => [...new Set(result?.bags.flatMap((b) => [bagKey(b.bagTag, b.flightId), ...(b.onwardFlightId ? [bagKey(b.bagTag, b.onwardFlightId)] : [])]) ?? [])],
+    [result],
+  );
   const live = useLive(keys.length > 0 ? { kind: "bags", keys } : null, result?.accessToken ?? null, "bagChanged", signal);
   const pollMs = useRef(POLL_FAST_MS);
   pollMs.current = live === "live" ? POLL_SLOW_MS : POLL_FAST_MS;

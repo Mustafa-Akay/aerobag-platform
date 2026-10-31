@@ -15,13 +15,16 @@ public sealed class FlightMilestoneStore(NpgsqlDataSource db)
     {
         await using var cmd = db.CreateCommand(
             """
-            INSERT INTO flight_milestones (flight_id, departed_utc, unloading_completed_utc, first_bag_on_belt_utc, last_bag_on_belt_utc, updated_at_utc)
-            VALUES (@id, @d, @u, @fb, @lb, now())
+            INSERT INTO flight_milestones (flight_id, departed_utc, unloading_completed_utc, first_bag_on_belt_utc, last_bag_on_belt_utc,
+                                           scheduled_departure_utc, updated_at_utc)
+            VALUES (@id, @d, @u, @fb, @lb, @sd, now())
             ON CONFLICT (flight_id) DO UPDATE SET
               departed_utc = COALESCE(EXCLUDED.departed_utc, flight_milestones.departed_utc),
               unloading_completed_utc = COALESCE(EXCLUDED.unloading_completed_utc, flight_milestones.unloading_completed_utc),
               first_bag_on_belt_utc = COALESCE(EXCLUDED.first_bag_on_belt_utc, flight_milestones.first_bag_on_belt_utc),
               last_bag_on_belt_utc = COALESCE(EXCLUDED.last_bag_on_belt_utc, flight_milestones.last_bag_on_belt_utc),
+              -- Planlanan kalkış değişebilir (tarife değişikliği, gecikme ilanı): son bildirilen geçerlidir.
+              scheduled_departure_utc = COALESCE(EXCLUDED.scheduled_departure_utc, flight_milestones.scheduled_departure_utc),
               updated_at_utc = now()
             """);
         cmd.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Varchar) { Value = m.FlightId });
@@ -29,6 +32,7 @@ public sealed class FlightMilestoneStore(NpgsqlDataSource db)
         cmd.Parameters.Add(new NpgsqlParameter("u", NpgsqlDbType.TimestampTz) { Value = (object?)m.UnloadingCompletedUtc?.UtcDateTime ?? DBNull.Value });
         cmd.Parameters.Add(new NpgsqlParameter("fb", NpgsqlDbType.TimestampTz) { Value = (object?)m.FirstBagOnBeltUtc?.UtcDateTime ?? DBNull.Value });
         cmd.Parameters.Add(new NpgsqlParameter("lb", NpgsqlDbType.TimestampTz) { Value = (object?)m.LastBagOnBeltUtc?.UtcDateTime ?? DBNull.Value });
+        cmd.Parameters.Add(new NpgsqlParameter("sd", NpgsqlDbType.TimestampTz) { Value = (object?)m.ScheduledDepartureUtc?.UtcDateTime ?? DBNull.Value });
         await cmd.ExecuteNonQueryAsync(ct);
     }
 }
@@ -74,6 +78,7 @@ public sealed class BagAlertService(NpgsqlDataSource db, AlertPolicy policy, IOp
             FROM bags b
             JOIN flight_milestones m ON m.flight_id = b.flight_id
             WHERE b.current_state IN ('CHECKED_IN', 'SECURITY_SCREENED', 'LOADED_ON_AIRCRAFT')
+              AND b.inbound_flight_id IS NULL -- bağlantı satırı (W10a): kaçırılan bağlantı ayrı bir kuraldır (W10b)
               AND (m.departed_utc <= @nl OR m.unloading_completed_utc <= @mi)
             UNION
             SELECT b.bag_id, b.bag_tag_number, b.flight_id, b.current_state, m.departed_utc, m.unloading_completed_utc

@@ -16,6 +16,12 @@ namespace AeroBag.Infrastructure;
 /// <remarks>
 /// Okuma kapsamı (W5): atlanan bir adım yalnızca o noktada okuyucu varsa "sıra dışı" (ANOMALY) sayılır. Bant ağzında
 /// okuyucu olmayan bir kurulumda şuttan çıkışa geçmek beklenen akıştır.
+/// <para>
+/// Aktarma (W10a): bavulun gelen uçuştaki satırı ile bağlantı uçuşundaki satırı ayrı satırlardır ve birbirini gösterir
+/// (<c>onward_flight_id</c>, <c>inbound_flight_id</c>). Bağlantı satırı aktarma hattından geçince ya da yüklenince gelen satır
+/// TRANSFERRED ile kapanır (sistem olayı). Bunu yalnızca bağlantı satırını işleyen işlem yapar ve kilitleri hep aynı sırada
+/// alır (önce bağlantı, sonra gelen satır); gelen satırı işleyen işlem bağlantı satırına dokunmaz, böylece kilitlenme olmaz.
+/// </para>
 /// </remarks>
 public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider clock, LookupKeyHasher hasher, ReadCoverage? coverage = null)
 {
@@ -65,15 +71,17 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
             }
         }
 
-        // Uçuş bağlamı normalde AODB'den gelir; şimdilik bilinmeyen alanlar yer tutucudur.
+        // Uçuş bağlamı normalde AODB'den gelir; şimdilik bilinmeyen alanlar yer tutucudur. Varış havalimanı mesajın .F satırından
+        // (W10a: bağlantı uçuşunun gideceği yer yolcu kartında gösterilir); uçuş satırı yalnızca ilk mesajla yazılır.
         await using (var flightCmd = Cmd(conn, tx,
                          """
                          INSERT INTO flights (flight_id, airline_code, flight_number, flight_date,
                                               aircraft_type, origin_airport, destination_airport, is_international)
-                         VALUES (@id, @al, @fn, @fd, 'UNK', 'XXX', 'XXX', FALSE)
+                         VALUES (@id, @al, @fn, @fd, 'UNK', 'XXX', @dest, FALSE)
                          ON CONFLICT (flight_id) DO NOTHING
                          """,
-                         P("id", flightId), P("al", ev.FlightNumber[..2]), P("fn", ev.FlightNumber), P("fd", ev.FlightDate)))
+                         P("id", flightId), P("al", ev.FlightNumber[..2]), P("fn", ev.FlightNumber), P("fd", ev.FlightDate),
+                         P("dest", ev.DestinationAirport ?? "XXX")))
         {
             await flightCmd.ExecuteNonQueryAsync(ct);
         }
@@ -105,8 +113,10 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
         var bagId = Guid.NewGuid();
         var bagExists = false;
         BagState? current = null;
+        string? inboundFlightId = ev.InboundFlightId;
+        string? storedInbound = null;
         await using (var selCmd = Cmd(conn, tx,
-                         "SELECT bag_id, current_state FROM bags WHERE bag_tag_number = @t AND flight_id = @f",
+                         "SELECT bag_id, current_state, inbound_flight_id FROM bags WHERE bag_tag_number = @t AND flight_id = @f",
                          P("t", ev.BagTag), P("f", flightId)))
         {
             await using var reader = await selCmd.ExecuteReaderAsync(ct);
@@ -115,10 +125,27 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
                 bagExists = true;
                 bagId = reader.GetGuid(0);
                 current = StateNames.FromDb(reader.GetString(1));
+                if (!reader.IsDBNull(2))
+                {
+                    storedInbound = reader.GetString(2);
+                    inboundFlightId = storedInbound; // kayıtlı bağ önceliklidir
+                }
             }
         }
 
-        var transition = BagStateMachine.Apply(current, ev.TargetState);
+        if (inboundFlightId is null)
+        {
+            // Aktarma BSM'si kaybolmuş ya da gecikmiş olabilir: gelen uçuştaki satır (.O ile) bu uçuşu bağlantı olarak
+            // gösteriyorsa bağ oradan öğrenilir. Gelen satır yalnızca okunur, kilidi alınmaz.
+            await using var inferCmd = Cmd(conn, tx,
+                "SELECT flight_id FROM bags WHERE onward_flight_id = @f AND bag_tag_number = @t ORDER BY updated_at_utc DESC LIMIT 1",
+                P("f", flightId), P("t", ev.BagTag));
+            inboundFlightId = await inferCmd.ExecuteScalarAsync(ct) as string;
+        }
+
+        // Bağlantı uçuşundaki satır (gelen uçuşu biliniyorsa) aktarma zincirini izler.
+        var route = inboundFlightId is not null ? BagRoute.TransferOnward : BagRoute.Arrival;
+        var transition = BagStateMachine.Apply(current, ev.TargetState, route);
         var stale = transition.Outcome == TransitionOutcome.IgnoredStale;
         var outcome = transition.Outcome switch
         {
@@ -133,11 +160,12 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
         {
             await using var ins = Cmd(conn, tx,
                 """
-                INSERT INTO bags (bag_id, bag_tag_number, flight_id, passenger_id, current_state, state_version, exit_cleared, updated_at_utc)
-                VALUES (@id, @t, @f, @p, @s, 1, @ec, @now)
+                INSERT INTO bags (bag_id, bag_tag_number, flight_id, passenger_id, current_state, state_version, exit_cleared, updated_at_utc,
+                                  inbound_flight_id, onward_flight_id)
+                VALUES (@id, @t, @f, @p, @s, 1, @ec, @now, @inb, @onw)
                 """,
                 P("id", bagId), P("t", ev.BagTag), P("f", flightId), P("p", passengerId), P("s", StateNames.ToDb(newState)),
-                P("ec", exitCleared), P("now", received));
+                P("ec", exitCleared), P("now", received), V("inb", inboundFlightId), V("onw", ev.OnwardFlightId));
             await ins.ExecuteNonQueryAsync(ct);
         }
         else if (!stale)
@@ -150,6 +178,19 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
                 """,
                 P("s", StateNames.ToDb(newState)), P("ec", exitCleared), P("now", received), P("id", bagId));
             await upd.ExecuteNonQueryAsync(ct);
+        }
+
+        if (bagExists && ((storedInbound is null && inboundFlightId is not null) || ev.OnwardFlightId is not null))
+        {
+            // Aktarma bağı sonradan gelen bir mesajla (örn. geç gelen BSM) öğrenilebilir; kayıtlı bağ değiştirilmez.
+            await using var links = Cmd(conn, tx,
+                """
+                UPDATE bags SET inbound_flight_id = COALESCE(inbound_flight_id, @inb),
+                                onward_flight_id  = COALESCE(onward_flight_id, @onw)
+                WHERE bag_id = @id
+                """,
+                V("inb", storedInbound is null ? inboundFlightId : null), V("onw", ev.OnwardFlightId), P("id", bagId));
+            await links.ExecuteNonQueryAsync(ct);
         }
 
         if (bagExists && passengerId is not null)
@@ -218,10 +259,110 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
             }
         }
 
+        if (route == BagRoute.TransferOnward && inboundFlightId is not null)
+        {
+            await LinkInboundAsync(conn, tx, ev.BagTag, inboundFlightId, flightId,
+                handedOver: !stale && newState is BagState.TransferSorted or BagState.LoadedOnAircraft,
+                ev.OccurredAtUtc, received, ct);
+        }
+
         await tx.CommitAsync(ct);
         return new ProcessResult(ProcessResult.Accepted, outcome,
             current is null ? null : StateNames.ToDb(current.Value),
             StateNames.ToDb(stale ? current!.Value : newState), ev.BagTag, flightId, null);
+    }
+
+    /// <summary>
+    /// Gelen uçuştaki satırı bağlantı satırına bağlar ve bavul aktarma hattına ya da bağlantı uçağına geçtiyse onu
+    /// TRANSFERRED ile kapatır (SYSTEM olayı; aynı satır için bir kez). Gelen satır yoksa (BSM'si gelmemiş) bir şey yapılmaz.
+    /// </summary>
+    private async Task LinkInboundAsync(NpgsqlConnection conn, NpgsqlTransaction tx, string tag, string inboundFlightId,
+        string onwardFlightId, bool handedOver, DateTimeOffset occurred, DateTimeOffset received, CancellationToken ct)
+    {
+        // Kilit sırası: bağlantı satırının kilidi zaten alındı; şimdi gelen satırınki (bkz. sınıf açıklaması).
+        await using (var lockCmd = Cmd(conn, tx, "SELECT pg_advisory_xact_lock(hashtextextended(@k, 0))",
+                         P("k", $"{tag}|{inboundFlightId}")))
+        {
+            await lockCmd.ExecuteNonQueryAsync(ct);
+        }
+
+        Guid inboundBagId;
+        BagState inboundState;
+        await using (var sel = Cmd(conn, tx,
+                         "SELECT bag_id, current_state FROM bags WHERE bag_tag_number = @t AND flight_id = @f FOR UPDATE",
+                         P("t", tag), P("f", inboundFlightId)))
+        {
+            await using var r = await sel.ExecuteReaderAsync(ct);
+            if (!await r.ReadAsync(ct))
+            {
+                return;
+            }
+            inboundBagId = r.GetGuid(0);
+            inboundState = StateNames.FromDb(r.GetString(1))!.Value;
+        }
+
+        await using (var link = Cmd(conn, tx,
+                         "UPDATE bags SET onward_flight_id = COALESCE(onward_flight_id, @onw) WHERE bag_id = @id",
+                         V("onw", onwardFlightId), P("id", inboundBagId)))
+        {
+            await link.ExecuteNonQueryAsync(ct);
+        }
+
+        if (!handedOver)
+        {
+            return;
+        }
+
+        var t = BagStateMachine.Apply(inboundState, BagState.Transferred);
+        if (t.Outcome == TransitionOutcome.IgnoredStale)
+        {
+            return;
+        }
+
+        var outcome = t.Outcome == TransitionOutcome.AppliedWithAnomaly && _coverage.IsAnomaly(t.SkippedStates) ? "ANOMALY" : "APPLIED";
+        await ExecAsync(conn, tx, ct,
+            """
+            UPDATE bags SET current_state = 'TRANSFERRED', state_version = state_version + 1, updated_at_utc = @now
+            WHERE bag_id = @id
+            """,
+            P("now", received), P("id", inboundBagId));
+
+        await ExecAsync(conn, tx, ct,
+            """
+            INSERT INTO baggage_events (event_id, idempotency_key, bag_id, message_type, from_state, to_state, outcome,
+                                        scanner_id, source, raw_text, payload, occurred_at_utc, received_at_utc)
+            VALUES (@eid, @ik, @bid, 'SYSTEM', @from, 'TRANSFERRED', @oc, 'transfer', 'system', NULL, @pl, @occ, @rec)
+            ON CONFLICT (idempotency_key) DO NOTHING
+            """,
+            P("eid", Guid.NewGuid()), P("ik", $"transferred:{inboundBagId}"), P("bid", inboundBagId),
+            P("from", StateNames.ToDb(inboundState)), P("oc", outcome),
+            J("pl", JsonSerializer.Serialize(new
+            {
+                reason = "HANDED_TO_TRANSFER",
+                onwardFlightId,
+                skippedStates = t.SkippedStates.Select(StateNames.ToDb).ToArray(),
+            })),
+            P("occ", occurred), P("rec", received));
+
+        await ExecAsync(conn, tx, ct,
+            "INSERT INTO outbox_messages (id, topic, partition_key, payload, created_at_utc) VALUES (@id, 'baggage.events', @pk, @pl, @now)",
+            P("id", Guid.NewGuid()), P("pk", tag),
+            J("pl", JsonSerializer.Serialize(new
+            {
+                bagTag = tag,
+                flightId = inboundFlightId,
+                fromState = StateNames.ToDb(inboundState),
+                toState = "TRANSFERRED",
+                outcome,
+                occurredAtUtc = occurred,
+            })),
+            P("now", received));
+    }
+
+    private static async Task ExecAsync(NpgsqlConnection conn, NpgsqlTransaction tx, CancellationToken ct, string sql, params NpgsqlParameter[] parameters)
+    {
+        await using var cmd = Cmd(conn, tx, sql, parameters);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private async Task DeadLetterAsync(string source, string? rawText, string error, CancellationToken ct)
@@ -251,6 +392,9 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
     }
 
     private static NpgsqlParameter P(string name, object? value) => new(name, value ?? DBNull.Value);
+
+    /// <summary>Boş olabilen metin parametresi (tipi açık: COALESCE içinde de doğru çözülür).</summary>
+    private static NpgsqlParameter V(string name, string? value) => new(name, NpgsqlDbType.Varchar) { Value = (object?)value ?? DBNull.Value };
 
     private static NpgsqlParameter PB(string name, byte[] bytes) => new(name, NpgsqlDbType.Bytea) { Value = bytes };
 

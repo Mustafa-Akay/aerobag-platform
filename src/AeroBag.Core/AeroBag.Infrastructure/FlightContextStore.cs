@@ -116,7 +116,8 @@ public sealed class FlightContextStore(NpgsqlDataSource db)
             ) x ON x.t IS NOT NULL
             WHERE NOT c.outcome_reported
             GROUP BY c.flight_id, c.on_block_utc, c.wide, c.rain, c.bags, c.stand_m, c.chute_m, c.speed_mps, c.arrivals_30, c.handler
-            HAVING count(*) >= c.bags * 0.9
+            -- Aktarma bavulları (W10a) banda gelmez; eşik bu uçuşun banda gelecek bavullarına göre.
+            HAVING count(*) >= (c.bags - (SELECT count(*) FROM bags t WHERE t.flight_id = c.flight_id AND t.onward_flight_id IS NOT NULL)) * 0.9
                AND @now >= max(x.t) + interval '10 minutes'
             """);
         cmd.Parameters.Add(new NpgsqlParameter("now", NpgsqlDbType.TimestampTz) { Value = now.UtcDateTime });

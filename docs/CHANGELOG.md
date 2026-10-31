@@ -12,7 +12,7 @@ Bu girdiler yazıldıkları andaki durumu anlatır; sonraki bir paket bir sını
   - **Açılış sırası:** `docker compose up --wait` → projeler sırayla derlenir (eşzamanlı `dotnet run` dosya kilidine takılmasın) → göç → API (`/health` 90 sn beklenir) → ML yoklaması (yalnızca uyarı) → arayüz (gerekirse `npm install`) → simülatör → tarayıcı.
   - API, arayüz ve simülatör ayrı pencerelerde açılır; pencereler `.demo\pids.txt`'ye yazılır. `-Stop` onları alt süreçleriyle kapatır (`taskkill /T`), portu hâlâ tutan bir süreç varsa yalnızca bildirir (başka bir projenin olabilir), Docker servislerini durdurur (veri korunur).
   - Seçenekler: `-Coverage` (API ve simülatör aynı profille açılır), `-Speed`, `-Seed`, `-NoSimulator`, `-NoBuild`, `-NoBrowser`, `-KeepDocker`.
-- **Doğrulama:** betik PowerShell ayrıştırıcısıyla denetlendi; yerel komut çıkış kodunun yakalanması ve Türkçe ayarda ondalık ayırıcı ayrıca sınandı. Uçtan uca deneme Windows'ta elle yapılır (otomatik testi yok); sonucu bu paketin PR'ına yazılır.
+- **Doğrulama:** betik PowerShell ayrıştırıcısıyla denetlendi; yerel komut çıkış kodunun yakalanması ve Türkçe ayarda ondalık ayırıcı ayrıca sınandı. Uçtan uca deneme Windows'ta elle yapıldı (31 Ekim, otomatik testi yok): ön kontrol, üç pencere ve tarayıcı açıldı, yolcu sayfasında simülatörün PNR'ıyla sorgu çalıştı, `-Stop` pencereleri ve alt süreçleri kapattı.
 
 ## Toparlama, T1: havayolu çerçevesi
 

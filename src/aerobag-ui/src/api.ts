@@ -25,6 +25,8 @@ export type PassengerBag = {
   onwardState: string | null;
   /** Bağlantı uçuşunun varış havalimanı (IATA kodu); takip burada biter, yolcu bavulunu orada alır. */
   onwardDestination: string | null;
+  /** Bağlantı uçağı kalktı ve bavul ona yüklenmedi (olmuş bir olay; kabul kapanışının geçmesi yalnızca personele gösterilir). */
+  connectionMissed: boolean;
 };
 
 export type BagNotice = "NOT_LOADED" | "MISSING_AT_ARRIVAL" | "ARRIVAL_DELAYED" | "LIKELY_ON_BELT";

@@ -64,6 +64,7 @@ export type Messages = {
     note: string;
     onwardOffloaded: string;
     collectAt: (airport: string) => string;
+    missed: string;
   };
   eta: {
     title: string;
@@ -147,6 +148,7 @@ const tr: Messages = {
     note: "Bu bagaj bu havalimanında banda gelmez; bağlantı uçuşunuza aktarılır.",
     onwardOffloaded: "Bagajınız bağlantı uçağından indirildi. Havayolu ile iletişime geçin.",
     collectAt: (a) => `Bagajınızı varış havalimanında (${a}) bant başından alacaksınız.`,
+    missed: "Bagajınız bağlantı uçağınıza yetişmedi. Varışta bant başında beklemek yerine havayolunuzun bagaj hizmetlerine başvurun.",
   },
   eta: {
     title: "Bantta görünme tahmini",
@@ -235,6 +237,7 @@ const en: Messages = {
     note: "This bag will not come out on a belt here; it is transferred to your connecting flight.",
     onwardOffloaded: "Your bag was taken off your connecting flight. Please contact your airline.",
     collectAt: (a) => `You will collect your bag from the belt at your destination airport (${a}).`,
+    missed: "Your bag did not make your connecting flight. On arrival, please go to your airline's baggage services instead of waiting at the belt.",
   },
   eta: {
     title: "Estimated time on the belt",

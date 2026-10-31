@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using AeroBag.Application.Alerts;
+using AeroBag.Application.Time;
 using AeroBag.Infrastructure;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -177,6 +178,32 @@ public sealed class TransferTests(PostgresFixture fx) : IClassFixture<PostgresFi
                 "SELECT count(*) FROM bag_alerts a JOIN bags b ON b.bag_id = a.bag_id WHERE b.bag_tag_number = @t", tag));
         }
         Assert.Equal("CHECKED_IN", (await RowAsync(waiting, "ZZ5915-20261022")).State);
+    }
+
+    [Fact]
+    public async Task Passenger_is_told_about_a_missed_connection_only_after_the_connecting_flight_departs()
+    {
+        var made = NewTag();
+        var missed = NewTag();
+        var pnrMade = NewPnr();
+        var pnrMissed = NewPnr();
+        await RunAsync(Journey("ZZ0918", "ZZ5918", made, pnrMade));
+        await RunAsync(Journey("ZZ0918", "ZZ5918", missed, pnrMissed, loaded: false));
+        await new FlightMilestoneStore(_app).UpsertAsync(
+            new FlightMilestones("ZZ5918-20261022", DepartedUtc: At("130500"), ScheduledDepartureUtc: At("130000")));
+
+        PassengerQueries Lookup(string hhmmss) =>
+            new(fx.Db, Hasher, new EtaStatistics(fx.Db), new FixedTime(Wall), operationalClock: new FixedOperationalClock(At(hhmmss)));
+
+        // Kalkıştan önce (kabul kapanışı geçmiş olsa da) yolcuya "yetişmedi" denmez; bu yalnızca personel panosundadır.
+        Assert.False((await Lookup("130400").LookupAsync(pnrMissed, "YILMAZ"))!.Bags.Single().ConnectionMissed);
+
+        var after = (await Lookup("130500").LookupAsync(pnrMissed, "YILMAZ"))!.Bags.Single();
+        Assert.True(after.ConnectionMissed);
+        Assert.Equal("TRANSFER_SORTED", after.OnwardState);
+
+        // Yüklenen bavul kalkıştan sonra da "yetişmedi" sayılmaz.
+        Assert.False((await Lookup("130500").LookupAsync(pnrMade, "YILMAZ"))!.Bags.Single().ConnectionMissed);
     }
 
     private static HttpRequestMessage Get(string url, string token)

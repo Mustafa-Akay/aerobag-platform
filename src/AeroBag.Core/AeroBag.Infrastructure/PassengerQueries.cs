@@ -26,8 +26,12 @@ public sealed record EtaView(
 /// </param>
 /// <param name="OnwardDestination">Bağlantı uçuşunun varış havalimanı (IATA kodu); bilinmiyorsa null. Takip burada biter,
 /// yolcuya bavulunu nerede alacağı söylenir.</param>
+/// <param name="ConnectionMissed">
+/// Bağlantı uçağı kalktı (AODB kalkış kilometre taşı, operasyon saatine göre) ve bavul ona yüklenmedi. Olasılık değil, olmuş bir
+/// olaydır; yolcuya bu yüzden gösterilir. Kabul kapanışının geçmesi yalnızca personel panosunda görünür.
+/// </param>
 public sealed record PassengerBagView(string BagTag, string FlightId, string State, EtaView? Eta, string? Carousel, string? Notice,
-    string? OnwardFlightId = null, string? OnwardState = null, string? OnwardDestination = null)
+    string? OnwardFlightId = null, string? OnwardState = null, string? OnwardDestination = null, bool ConnectionMissed = false)
 {
     /// <summary>Yolcu jetonuna girecek (etiket, uçuş) çiftleri: aktarma bavulunda iki uçuşun satırı da.</summary>
     public IEnumerable<(string BagTag, string FlightId)> Keys()
@@ -56,7 +60,7 @@ public sealed class PassengerQueries(
 
     private record Row(string Tag, string Flight, string State, DateTimeOffset? LastEvent, string? Carousel,
         string? OpenAlert, DateTimeOffset? OnBlock, int FirstBagTargetSec, bool AnyBagUnloaded, DateTimeOffset? UnloadingCompleted,
-        string? InboundFlight, string? OnwardFlight, string? Destination)
+        string? InboundFlight, string? OnwardFlight, string? Destination, DateTimeOffset? Departed)
     {
         public bool IsTransfer => InboundFlight is not null || OnwardFlight is not null;
     }
@@ -91,7 +95,8 @@ public sealed class PassengerQueries(
                             AND o.current_state NOT IN ('CHECKED_IN', 'SECURITY_SCREENED', 'LOADED_ON_AIRCRAFT', 'OFFLOADED_NO_SHOW')),
                    m.unloading_completed_utc,
                    b.inbound_flight_id, b.onward_flight_id,
-                   NULLIF(f.destination_airport, 'XXX')
+                   NULLIF(f.destination_airport, 'XXX'),
+                   m.departed_utc
             FROM passengers p
             JOIN bags b ON b.passenger_id = p.passenger_id
             JOIN flights f ON f.flight_id = b.flight_id
@@ -122,7 +127,8 @@ public sealed class PassengerQueries(
                     r.IsDBNull(9) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(9),
                     r.IsDBNull(10) ? null : r.GetString(10),
                     r.IsDBNull(11) ? null : r.GetString(11),
-                    r.IsDBNull(12) ? null : r.GetString(12).Trim()));
+                    r.IsDBNull(12) ? null : r.GetString(12).Trim(),
+                    r.IsDBNull(13) ? (DateTimeOffset?)null : r.GetFieldValue<DateTimeOffset>(13)));
             }
         }
 
@@ -171,7 +177,7 @@ public sealed class PassengerQueries(
         }
 
         var bags = new List<PassengerBagView>();
-        bags.AddRange(TransferViews(rows));
+        bags.AddRange(TransferViews(rows, asOf));
         bags.AddRange(rows.Where(r => !r.IsTransfer).Select(row =>
         {
             var state = StateNames.FromDb(row.State)!.Value;
@@ -227,8 +233,17 @@ public sealed class PassengerQueries(
     /// Varış bildirimleri (W4) bu kartta gösterilmez: metinleri yolcuyu bant başına ve bagaj hizmetlerine yönlendirir,
     /// aktarma yolcusu için yanlıştır. Aktarmaya özgü bildirimler W10b'dedir.
     /// </summary>
-    private static IEnumerable<PassengerBagView> TransferViews(List<Row> rows)
+    private static IEnumerable<PassengerBagView> TransferViews(List<Row> rows, DateTimeOffset asOf)
     {
+        // Bağlantı uçağı kalktı ve bavul yüklenmedi (yolcu uçmadıysa bavulun indirilmesi ayrı bir durumdur).
+        static bool Missed(Row onward, DateTimeOffset now)
+        {
+            var s = StateNames.FromDb(onward.State)!.Value;
+            return onward.Departed is { } d && now >= d
+                && s != BagState.OffloadedNoShow
+                && BagStateMachine.Rank(s) < BagStateMachine.Rank(BagState.LoadedOnAircraft);
+        }
+
         var onwardRows = rows.Where(r => r.InboundFlight is not null).ToList();
         var usedOnward = new HashSet<Row>();
         foreach (var inbound in rows.Where(r => r.InboundFlight is null && r.OnwardFlight is not null))
@@ -239,14 +254,14 @@ public sealed class PassengerQueries(
                 usedOnward.Add(onward);
             }
             yield return new PassengerBagView(inbound.Tag, inbound.Flight, inbound.State, null, null, null,
-                inbound.OnwardFlight, onward?.State, onward?.Destination);
+                inbound.OnwardFlight, onward?.State, onward?.Destination, onward is not null && Missed(onward, asOf));
         }
 
         foreach (var onward in onwardRows.Where(o => !usedOnward.Contains(o)))
         {
             // Gelen satır bu sorguda yok: bağlantı satırı kendi başına (gelen ayağın durumu bilinmiyor).
             yield return new PassengerBagView(onward.Tag, onward.Flight, onward.State, null, null, null, onward.Flight, onward.State,
-                onward.Destination);
+                onward.Destination, Missed(onward, asOf));
         }
     }
 

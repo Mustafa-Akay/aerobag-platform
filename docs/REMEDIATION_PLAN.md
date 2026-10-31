@@ -37,7 +37,7 @@ Dalga 3 (genişleme)  W8 Öncelikli bavul   W9 İngilizce arayüz   W10 Aktarma 
                      W11 ExitGuard maliyet analizi   W12 Temizlik ve belge sadeleştirme
 ```
 
-**Dalga 3 için kararlaştırılan sıra (30 Ekim, 31 Ekim'de güncellendi):** W12a (yolcu jetonunun kapsamı, güvenlik) → W9 → W10a → W10b → W12'nin kalanı → toparlama (demo senaryosu, README, tek sayfalık özet, gerçek veri planı). W8 bu sıranın sonunda yeniden değerlendirilir (aşağıda).
+**Dalga 3 için kararlaştırılan sıra (30 Ekim, 31 Ekim'de güncellendi):** W12a (yolcu jetonunun kapsamı, güvenlik) → W9 → W10a → W12'nin kalanı → toparlama (demo senaryosu, README, tek sayfalık özet, gerçek veri planı). W8 bu sıranın sonunda yeniden değerlendirilir (aşağıda).
 
 Dalga 0 önce yapılır, çünkü Dalga 1'deki her paket şemayı değiştirecek ve yeni zamanlanmış işler ekleyecek. Bunlar göç ve saat soyutlaması olmadan yapılırsa aynı borç büyür.
 
@@ -123,7 +123,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 #### W10. Aktarma bavulu (B10)
 - **Neden:** SITA 2026 Baggage IT Insights'a göre 2025'te yanlış yönetilen bavulların %39'u aktarma kaynaklıdır (bir önceki yıl %41); tek başına en büyük neden. Antalya ağırlıklı olarak doğrudan uçuş alan bir havalimanıdır; aynı model bağlantılı uçuşları olan her havayolu ve hub için geçerlidir.
 - **W10a, veri ve akış:** aktarma bavulu iki bağlı satır (gelen uçuş ve bağlantı uçuşu; her biri yine `etiket@uçuş`). BSM'de `.I` (gelen uçuş) ve `.O` (bağlantı uçuşu), yeni okuma noktası `TRANSFER`. Durumlar `TRANSFER_SORTED` (bağlantı satırı) ve `TRANSFERRED` (gelen satır aktarmaya devredildi). Bağlantı uçuşunun planlanan kalkışı AODB kilometre taşıyla gelir; bavul kabul kapanışı ondan hesaplanır (demo varsayımı 15 dk). Yolcu kartı tek yolculuk; operasyon panosunda "Aktarma" sütunu ve bağlantı uçuşu bölümü. Simülatörde aktarma bavulları ve 20 dk'lık kalkış tarifesi.
-- **W10b, risk ve ölçüm:** "bağlantıyı kaçırma riski" (yalnızca personel; kalan aktarma süresinin kötümser tahmini kabul kapanışını geçiyor) ve "bağlantı kaçırıldı" (bağlantı uçağı kalktı, bavul yüklenmedi; yolcuya da) uyarıları; acil aktarma listesi; `transfer-eval` modu. Ölçmeden önce yazılan hedef: kaçırılan bavulların en az %80'i kabul kapanışından en az 10 dk önce işaretlenmeli.
+- **W10b, risk ve ölçüm (sonraya bırakıldı, 31 Ekim):** "bağlantıyı kaçırma riski" uyarısı (yalnızca personel; kalan aktarma süresinin kötümser tahmini kabul kapanışını geçiyor), uyarı tablosuna yazılan "bağlantı kaçırıldı", acil aktarma listesi ve `transfer-eval` modu. Ölçmeden önce yazılan hedef: kaçırılan bavulların en az %80'i kabul kapanışından en az 10 dk önce işaretlenmeli. W10a'ya yalnızca doğruluk düzeltmesi alındı: bağlantı uçağı kalktıysa ve bavul yüklenmediyse yolcu kartı bunu söyler (aksi halde "yüklenecek" demeye devam ediyordu).
 - **Sonraya bırakıldı (31 Ekim):** bağlantı uçuşunun varış tarafını izlemek (varışta indirme, bant, alındı). Bu kurulum aktarma havalimanındadır; varış tarafı başka bir havalimanının verisidir. Bir havayolu kurulumunda havayolları arası bavul mesajlarıyla gelir (IATA Resolution 753 dört noktada izleme ister, sonuncusu varışta yolcuya teslim). Bağlantı satırının durum zinciri bu adımları zaten içerir; eksik olan simülatör ve yolcu kartıdır. Toparlama aşamasında, sistem bir havayoluna da gösterilecekse ele alınacak. Şimdilik kartın son adımı yolcuya bavulunu hangi havalimanında alacağını söyler.
 
 #### W11. ExitGuard operasyon maliyeti (B11)
@@ -156,7 +156,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W8 Öncelikli bavul | Ertelendi (sıranın sonunda yeniden değerlendirilecek) |
 | W9 İngilizce arayüz | Yolcu ekranı tamam (PR birleştirildi); personel ekranları ikinci adım |
 | W10a Aktarma bavulu: veri ve akış | Kod ve testler hazır, PR bekliyor (branch `faz6/w10a-transfer`) |
-| W10b Aktarma bavulu: risk ve ölçüm | Başlamadı |
+| W10b Aktarma bavulu: risk ve ölçüm | Sonraya bırakıldı (yeni özellik yok kararı, 31 Ekim) |
 | W11 ExitGuard maliyeti | Kapsam dışı (gerekçe yukarıda) |
 | W12a Yolcu jetonunun kapsamı | Tamam (PR birleştirildi) |
 | W12 Temizlik ve belgeler (kalanı) | Başlamadı |

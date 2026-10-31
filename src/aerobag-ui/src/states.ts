@@ -81,6 +81,7 @@ export function transferStepIndex(bag: PassengerBag): number {
 
 export function transferMessage(bag: PassengerBag, m: Messages): string {
   if (bag.onwardState === "OFFLOADED_NO_SHOW") return m.transfer.onwardOffloaded;
+  if (bag.connectionMissed) return m.transfer.missed;
   if (bag.state === "OFFLOADED_NO_SHOW") return m.state.offloaded;
   const i = transferStepIndex(bag);
   if (i < 0) return m.state.updating;

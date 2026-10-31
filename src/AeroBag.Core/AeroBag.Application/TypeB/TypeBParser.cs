@@ -23,6 +23,8 @@ public static class TypeBParser
     private static readonly Regex Unload = new(@"^([A-Z0-9]{2,12})/(\d{8}T\d{6}Z)$", RegexOptions.Compiled);
     private static readonly Regex Scan = new(@"^S/([A-Z]{3,10}\d{2})/(\d{2}[A-Z]{3})/(\d{6})Z$", RegexOptions.Compiled);
     private static readonly Regex Target = new(@"^([A-Z]{3,10}\d{2})/([A-Z_]{3,20})$", RegexOptions.Compiled);
+    // W10a: aktarma. .I gelen uçuş, .O bağlantı uçuşu (uçuş/gün-ay/havalimanı).
+    private static readonly Regex OtherFlight = new(@"^([A-Z0-9]{2}\d{3,4}[A-Z]?)/(\d{2}[A-Z]{3})/([A-Z]{3})$", RegexOptions.Compiled);
 
     private static readonly string[] Months =
         ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -34,7 +36,7 @@ public static class TypeBParser
         [TypeBKind.Bpm] = ["V", "J", "F", "N"],
     };
 
-    private static readonly HashSet<string> Known = ["V", "F", "N", "W", "P", "L", "U", "J", "Q"];
+    private static readonly HashSet<string> Known = ["V", "F", "N", "W", "P", "L", "U", "J", "Q", "I", "O"];
 
     /// <param name="text">Ham mesaj metni.</param>
     /// <param name="referenceDate">
@@ -195,14 +197,38 @@ public static class TypeBParser
             pointType = qm.Groups[2].Value;
         }
 
+        var ownFlightId = $"{f.Groups[1].Value}-{flightDate:yyyyMMdd}";
+        var inbound = OptionalFlight(fields, "I", reference, ownFlightId);
+        var onward = OptionalFlight(fields, "O", reference, ownFlightId);
+        if (inbound is not null && onward is not null && inbound.FlightId == onward.FlightId)
+        {
+            throw new TypeBException(ParseError.InvalidField, "Alan .I ve .O aynı uçuşu gösteremez.");
+        }
+
         var message = new TypeBMessage(
             kind, airport, f.Groups[1].Value, flightDate, n.Groups[1].Value, n.Groups[2].Value,
             DestinationAirport: f.Groups[3].Value,
             CabinClass: f.Groups[4].Success ? f.Groups[4].Value : null,
             WeightKg: weight, Surname: surname, GivenName: given, Pnr: pnr, Stand: stand,
             ScanPoint: scanPoint, TargetCarousel: carousel, TargetPointType: pointType,
-            OccurredAtUtc: occurred);
+            OccurredAtUtc: occurred, Inbound: inbound, Onward: onward);
         return ParseResult.Ok(message);
+    }
+
+    /// <summary>.I/.O alanı: mesajın kendi uçuşundan farklı bir uçuş olmalı.</summary>
+    private static FlightRef? OptionalFlight(Dictionary<string, string> fields, string key, DateOnly reference, string ownFlightId)
+    {
+        if (!fields.TryGetValue(key, out var value))
+        {
+            return null;
+        }
+        var m = Require(OtherFlight, value, key);
+        var flight = new FlightRef(m.Groups[1].Value, ParseDayMonth(m.Groups[2].Value, reference, key), m.Groups[3].Value);
+        if (flight.FlightId == ownFlightId)
+        {
+            throw new TypeBException(ParseError.InvalidField, $"Alan .{key} mesajın kendi uçuşunu gösteremez.");
+        }
+        return flight;
     }
 
     private static Match Require(Regex rx, string value, string field)

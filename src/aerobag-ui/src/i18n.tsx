@@ -16,6 +16,15 @@ export type StepState =
   | "ON_CAROUSEL"
   | "CLAIMED_FROM_BELT";
 
+/** Aktarma bavulunun yolcuya gösterilen adımları (W10a). */
+export type TransferStep =
+  | "CHECKED_IN"
+  | "SECURITY_SCREENED"
+  | "LOADED_ON_AIRCRAFT"
+  | "UNLOADED_AT_ARRIVAL"
+  | "TRANSFER_SORTED"
+  | "ONWARD_LOADED";
+
 type Text = { title: string; body: string };
 
 export type Messages = {
@@ -49,6 +58,13 @@ export type Messages = {
     updating: string;
   };
   notices: Record<BagNotice, Text>;
+  transfer: {
+    steps: Record<TransferStep, { short: string; message: string }>;
+    onward: string;
+    note: string;
+    onwardOffloaded: string;
+    collectAt: (airport: string) => string;
+  };
   eta: {
     title: string;
     likely: string;
@@ -117,6 +133,20 @@ const tr: Messages = {
       title: "Bavulunuz büyük olasılıkla bantta",
       body: "Bu havalimanında bant başında okuma yapılmıyor; tahmini süre geçti. Bavulunuzu bantta göremezseniz bagaj hizmetlerine başvurun.",
     },
+  },
+  transfer: {
+    steps: {
+      CHECKED_IN: { short: "Teslim edildi", message: "Bagajınız teslim alındı." },
+      SECURITY_SCREENED: { short: "Güvenlik", message: "Bagajınız güvenlik kontrolünden geçti." },
+      LOADED_ON_AIRCRAFT: { short: "Uçakta", message: "Bagajınız ilk uçağınıza yüklendi." },
+      UNLOADED_AT_ARRIVAL: { short: "İndirildi", message: "Bagajınız aktarma havalimanında uçaktan indirildi." },
+      TRANSFER_SORTED: { short: "Aktarmada", message: "Bagajınız aktarma hattından geçti, bağlantı uçağınıza yüklenecek." },
+      ONWARD_LOADED: { short: "Bağlantı uçağında", message: "Bagajınız bağlantı uçağınıza yüklendi." },
+    },
+    onward: "Bağlantı",
+    note: "Bu bagaj bu havalimanında banda gelmez; bağlantı uçuşunuza aktarılır.",
+    onwardOffloaded: "Bagajınız bağlantı uçağından indirildi. Havayolu ile iletişime geçin.",
+    collectAt: (a) => `Bagajınızı varış havalimanında (${a}) bant başından alacaksınız.`,
   },
   eta: {
     title: "Bantta görünme tahmini",
@@ -191,6 +221,20 @@ const en: Messages = {
       title: "Your bag is most likely on the belt",
       body: "Bags are not scanned at the belt at this airport, and the estimated time has passed. If you can't see your bag on the belt, please go to baggage services.",
     },
+  },
+  transfer: {
+    steps: {
+      CHECKED_IN: { short: "Checked in", message: "Your bag has been checked in." },
+      SECURITY_SCREENED: { short: "Security", message: "Your bag has passed security screening." },
+      LOADED_ON_AIRCRAFT: { short: "On aircraft", message: "Your bag has been loaded onto your first flight." },
+      UNLOADED_AT_ARRIVAL: { short: "Unloaded", message: "Your bag has been unloaded at the connecting airport." },
+      TRANSFER_SORTED: { short: "In transfer", message: "Your bag has passed transfer sorting and will be loaded onto your connecting flight." },
+      ONWARD_LOADED: { short: "On connection", message: "Your bag has been loaded onto your connecting flight." },
+    },
+    onward: "Connecting",
+    note: "This bag will not come out on a belt here; it is transferred to your connecting flight.",
+    onwardOffloaded: "Your bag was taken off your connecting flight. Please contact your airline.",
+    collectAt: (a) => `You will collect your bag from the belt at your destination airport (${a}).`,
   },
   eta: {
     title: "Estimated time on the belt",

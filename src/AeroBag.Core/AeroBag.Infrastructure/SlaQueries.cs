@@ -48,8 +48,8 @@ public sealed class SlaQueries(NpgsqlDataSource db, IMlPredictor ml, IOperationa
         await using (var cmd = db.CreateCommand(
             """
             SELECT f.flight_id, f.sla_first_bag_sec, f.sla_last_bag_sec,
-                   (SELECT count(*)::int FROM bags b WHERE b.flight_id = f.flight_id),
-                   (SELECT count(*)::int FROM bags b WHERE b.flight_id = f.flight_id
+                   (SELECT count(*)::int FROM bags b WHERE b.flight_id = f.flight_id AND b.onward_flight_id IS NULL),
+                   (SELECT count(*)::int FROM bags b WHERE b.flight_id = f.flight_id AND b.onward_flight_id IS NULL
                       AND b.current_state IN ('CHECKED_IN','SECURITY_SCREENED','LOADED_ON_AIRCRAFT','UNLOADED_AT_ARRIVAL','INBOUND_CHUTE')),
                    x.first_t, x.last_t,
                    m.first_bag_on_belt_utc, m.last_bag_on_belt_utc
@@ -64,6 +64,9 @@ public sealed class SlaQueries(NpgsqlDataSource db, IMlPredictor ml, IOperationa
                     GROUP BY b.bag_id
                 ) c
             ) x ON TRUE
+            -- W10a: aktarma bavulları banda gelmez (yukarıdaki sayımlara girmez); yalnızca bağlantı satırı taşıyan uçuşlar
+            -- buradan çıkış yapan uçuşlardır, varış SLA'sı yoktur.
+            WHERE NOT EXISTS (SELECT 1 FROM bags t WHERE t.flight_id = f.flight_id AND t.inbound_flight_id IS NOT NULL)
             ORDER BY f.flight_id
             """))
         {

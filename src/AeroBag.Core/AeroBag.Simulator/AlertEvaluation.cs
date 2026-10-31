@@ -99,7 +99,7 @@ public static class AlertEvaluation
         return history;
     }
 
-    private static int Rank(BagState s) => (int)s;
+    private static int Rank(BagState s) => BagStateMachine.Rank(s);
 
     public static Row Evaluate(IReadOnlyList<FlightResult> flights, AlertPolicy policy, double drop, double corrupt, int seed, string label,
         AeroBag.Application.Coverage.ReadCoverage? coverage = null)

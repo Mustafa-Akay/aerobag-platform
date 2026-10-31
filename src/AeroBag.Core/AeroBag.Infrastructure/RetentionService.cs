@@ -19,7 +19,9 @@ public sealed record RetentionOptions(int PersonalDataDays, int UndeliveredDays 
 /// </summary>
 public sealed class RetentionService(NpgsqlDataSource db, TimeProvider clock, RetentionOptions options)
 {
-    private static readonly string[] Delivered = ["CLAIMED_FROM_BELT", "EXIT_OVERDUE", "EXIT_CLEARED", "EXIT_REVIEW", "OFFLOADED_NO_SHOW"];
+    // TRANSFERRED: gelen uçuştaki aktarma satırı aktarmaya devredildi (W10a). Bağlantı satırının bu havalimanındaki son adımı
+    // bağlantı uçağına yüklenmektir; o da teslim sayılır (sorguda inbound_flight_id ile).
+    private static readonly string[] Delivered = ["CLAIMED_FROM_BELT", "EXIT_OVERDUE", "EXIT_CLEARED", "EXIT_REVIEW", "OFFLOADED_NO_SHOW", "TRANSFERRED"];
 
     public async Task<int> AnonymizeDueAsync(int batchSize = 500, CancellationToken ct = default)
     {
@@ -32,7 +34,9 @@ public sealed class RetentionService(NpgsqlDataSource db, TimeProvider clock, Re
                 JOIN bags b ON b.passenger_id = p.passenger_id
                 WHERE p.anonymized_at_utc IS NULL
                 GROUP BY p.passenger_id
-                HAVING (bool_and(b.current_state = ANY(@delivered)) AND max(b.updated_at_utc) < @cutoff)
+                HAVING (bool_and(b.current_state = ANY(@delivered)
+                                 OR (b.inbound_flight_id IS NOT NULL AND b.current_state = 'LOADED_ON_AIRCRAFT'))
+                        AND max(b.updated_at_utc) < @cutoff)
                     OR max(b.updated_at_utc) < @cutoffUndelivered
                 LIMIT @n
             )

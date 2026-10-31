@@ -22,11 +22,17 @@ public sealed record FlightSummary(
     int ExitOverdue,
     int ExitReview,
     string? Carousel,
-    int OpenAlerts);
+    int OpenAlerts,
+    int Transfer);
 
 /// <remarks>
 /// Okuma kapsamı (W5): bant ağzı okuması yoksa ilk/son bavul zamanı AODB'nin uçuş düzeyi bildiriminden gelir ve
 /// "takılı" bavul sayılamaz (null: bilinmiyor). "Bantta" sayacı bu kurulumda okumaya dayanmadığı için sıfır kalır.
+/// <para>
+/// Aktarma (W10a): pano gelen uçuşları gösterir. Bağlantı uçuşundaki satırlar (inbound_flight_id dolu) burada sayılmaz;
+/// onlar <see cref="TransferQueries"/>'tedir. Gelen uçuştaki aktarma bavulları <c>Transfer</c>'da sayılır ve banda gelmeyecekleri
+/// için varış sayaçlarına (varış öncesi, yolda, bantta, alındı) girmez; toplam ikisinin toplamıdır.
+/// </para>
 /// </remarks>
 public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = null, ReadCoverage? coverage = null)
 {
@@ -97,10 +103,10 @@ public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = n
             """
             SELECT flight_id,
                    count(*)::int,
-                   (count(*) FILTER (WHERE current_state IN ('CHECKED_IN','SECURITY_SCREENED','LOADED_ON_AIRCRAFT')))::int,
-                   (count(*) FILTER (WHERE current_state IN ('UNLOADED_AT_ARRIVAL','INBOUND_CHUTE')))::int,
-                   (count(*) FILTER (WHERE current_state = 'ON_CAROUSEL'))::int,
-                   (count(*) FILTER (WHERE current_state IN ('CLAIMED_FROM_BELT','EXIT_OVERDUE','EXIT_CLEARED','EXIT_REVIEW')))::int,
+                   (count(*) FILTER (WHERE onward_flight_id IS NULL AND current_state IN ('CHECKED_IN','SECURITY_SCREENED','LOADED_ON_AIRCRAFT')))::int,
+                   (count(*) FILTER (WHERE onward_flight_id IS NULL AND current_state IN ('UNLOADED_AT_ARRIVAL','INBOUND_CHUTE')))::int,
+                   (count(*) FILTER (WHERE onward_flight_id IS NULL AND current_state = 'ON_CAROUSEL'))::int,
+                   (count(*) FILTER (WHERE onward_flight_id IS NULL AND current_state IN ('CLAIMED_FROM_BELT','EXIT_OVERDUE','EXIT_CLEARED','EXIT_REVIEW')))::int,
                    (count(*) FILTER (WHERE current_state = 'EXIT_CLEARED'))::int,
                    (count(*) FILTER (WHERE current_state = 'EXIT_OVERDUE'))::int,
                    (count(*) FILTER (WHERE current_state = 'EXIT_REVIEW'))::int,
@@ -108,8 +114,10 @@ public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = n
                    (SELECT count(*) FROM bag_alerts a JOIN bags x ON x.bag_id = a.bag_id
                      WHERE x.flight_id = bags.flight_id AND a.closed_at_utc IS NULL)::int,
                    (SELECT m.first_bag_on_belt_utc FROM flight_milestones m WHERE m.flight_id = bags.flight_id),
-                   (SELECT m.last_bag_on_belt_utc FROM flight_milestones m WHERE m.flight_id = bags.flight_id)
+                   (SELECT m.last_bag_on_belt_utc FROM flight_milestones m WHERE m.flight_id = bags.flight_id),
+                   (count(*) FILTER (WHERE onward_flight_id IS NOT NULL))::int
             FROM bags
+            WHERE inbound_flight_id IS NULL
             GROUP BY flight_id
             ORDER BY flight_id
             """))
@@ -129,7 +137,7 @@ public sealed class OpsQueries(NpgsqlDataSource db, IOperationalClock? clock = n
                 result.Add(new FlightSummary(id, r.GetInt32(1), r.GetInt32(2), r.GetInt32(3), r.GetInt32(4), r.GetInt32(5),
                     t.Anomalies, t.FirstUnload, firstBelt, lastBelt, firstBagMinutes,
                     stalledCount, r.GetInt32(6), r.GetInt32(7), r.GetInt32(8),
-                    r.IsDBNull(9) ? null : r.GetString(9), r.GetInt32(10)));
+                    r.IsDBNull(9) ? null : r.GetString(9), r.GetInt32(10), r.GetInt32(13)));
             }
         }
 

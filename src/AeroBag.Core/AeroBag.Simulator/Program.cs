@@ -34,6 +34,8 @@ if (a.ContainsKey("help"))
                        (Coverage__Profile ortam değişkeni).
           live ve alert-eval: --not-loaded-rate P   yüklenmeyen bavul oranı (varsayılan 0.003, demo varsayımı)
                               --missing-rate P      varışta bulunmayan bavul oranı (varsayılan 0.002, demo varsayımı)
+          live: --transfer-rate P   aktarma bavulu oranı (varsayılan 0.06, demo varsayımı; diğer modlarda 0). Aktarma
+                                    bavulu banda değil, 20 dk'lık tarifedeki bir bağlantı uçuşuna (ZZ5xxx) gider.
                      --speed X   sanal saniye / gerçek saniye (varsayılan 60)
                      --dup-rate P --drop-rate P --corrupt-rate P   (varsayılan 0.02, 0.01, 0.005)
                      --source-id AD          imzalı istek için kaynak adı (varsayılan simulator)
@@ -65,6 +67,13 @@ if (notLoadedRate < 0 || missingRate < 0 || notLoadedRate + missingRate > 1)
     Console.Error.WriteLine("--not-loaded-rate ve --missing-rate 0 ile 1 arasında olmalı (toplamları en fazla 1).");
     return 1;
 }
+// W10a aktarma bavulları da yalnızca canlı gösterimde varsayılan olarak açık; ölçüm modları ve CSV (ML eğitimi) değişmez.
+var transferRate = GetDouble("transfer-rate", mode == "live" ? 0.06 : 0);
+if (transferRate is < 0 or > 0.5)
+{
+    Console.Error.WriteLine("--transfer-rate 0 ile 0.5 arasında olmalı.");
+    return 1;
+}
 AeroBag.Application.Coverage.ReadCoverage coverage;
 try
 {
@@ -76,10 +85,16 @@ catch (ArgumentException ex)
     return 1;
 }
 var options = new SimOptions(GetInt("flights", mode is "gate-eval" or "alert-eval" or "coverage-eval" ? 200 : 3), GetInt("bags", 120), GetInt("seed", 42), regime, start,
-    exitScans, exitScans && gatePackets, notLoadedRate, missingRate, coverage);
+    exitScans, exitScans && gatePackets, notLoadedRate, missingRate, coverage, transferRate);
 var flights = SimulationRunner.Run(options);
 var totalBags = flights.Sum(f => f.Bags.Count);
 Console.WriteLine($"{flights.Count} uçuş, {totalBags} bavul üretildi (tohum {options.Seed}, rejim {regime}, okuma kapsamı {coverage.Name}).");
+var transferBags = flights.SelectMany(f => f.Bags).Where(b => b.Transfer is not null).ToList();
+if (transferBags.Count > 0)
+{
+    var onwardCount = flights.SelectMany(f => f.OnwardFlights).Select(x => x.FlightId).Distinct().Count();
+    Console.WriteLine($"  Aktarma: {transferBags.Count} bavul, {onwardCount} bağlantı uçuşu; {transferBags.Count(b => b.Transfer!.MissedConnection)} bavul kabul kapanışına yetişmiyor.");
+}
 if (mode == "live" && coverage != AeroBag.Application.Coverage.ReadCoverage.Full)
 {
     Console.WriteLine($"  Not: API de aynı kapsamla açılmalı: $env:Coverage__Profile=\"{coverage.Name}\" (yoksa bant okuması beklenir).");
@@ -178,7 +193,7 @@ foreach (var f in flights)
     }
 }
 
-var scenarioBags = flights.SelectMany(f => f.Bags).Where(b => b.Fate is not null).ToList();
+var scenarioBags = flights.SelectMany(f => f.Bags).Where(b => b.Fate is BagFate.NotLoaded or BagFate.MissingAtArrival).ToList();
 if (mode == "live" && scenarioBags.Count > 0)
 {
     Console.WriteLine("Senaryo bavulları (W4; yolcu sayfasında uyarıyı görmek için):");
@@ -186,6 +201,18 @@ if (mode == "live" && scenarioBags.Count > 0)
     {
         var fate = b.Fate == BagFate.NotLoaded ? "uçağa yüklenmeyecek" : "varışta indirilmeyecek";
         Console.WriteLine($"  PNR {b.Pnr}  soyad {b.Surname}  (bavul {b.BagTag}, uçuş {b.FlightId}): {fate}");
+    }
+}
+
+if (mode == "live" && transferBags.Count > 0)
+{
+    // Yetişenlerden ve yetişmeyenlerden birkaç örnek (W10a; yolcu sayfasında aktarma kartını görmek için).
+    Console.WriteLine("Aktarma bavulları (örnek):");
+    foreach (var b in transferBags.Where(b => !b.Transfer!.MissedConnection).Take(3).Concat(transferBags.Where(b => b.Transfer!.MissedConnection).Take(2)))
+    {
+        var t = b.Transfer!;
+        var outcome = t.MissedConnection ? "kabul kapanışına yetişmeyecek" : "bağlantı uçağına yüklenecek";
+        Console.WriteLine($"  PNR {b.Pnr}  soyad {b.Surname}  (bavul {b.BagTag}, {b.FlightId} -> {t.OnwardFlightId}): {outcome}");
     }
 }
 
@@ -208,6 +235,7 @@ if (mode == "live")
     Console.WriteLine($"{contexts}/{flights.Count} uçuş bağlamı (AODB) gönderildi.");
     // Kilometre taşları (kalkış, indirme bitti) bavul okumalarıyla aynı zaman çizelgesinde, olay anında gider.
     var messages = flights.SelectMany(f => f.Messages).Concat(flights.SelectMany(f => ContextSender.Milestones(f.Info)))
+        .Concat(ContextSender.OnwardMilestones(flights.SelectMany(f => f.OnwardFlights)))
         .OrderBy(m => m.TimeUtc).ToList();
     var paceFrom = flights.Min(f => f.Info.OnBlockUtc);
 

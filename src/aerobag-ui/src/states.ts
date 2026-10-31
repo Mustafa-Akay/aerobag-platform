@@ -1,5 +1,5 @@
-import type { BagNotice } from "./api";
-import { MESSAGES, type Messages, type StepState } from "./i18n";
+import type { BagNotice, PassengerBag } from "./api";
+import { MESSAGES, type Messages, type StepState, type TransferStep } from "./i18n";
 
 /**
  * Bagaj yaşam döngüsünün yolcuya gösterilen adımları (docs/ARCHITECTURE.md bölüm 3.1).
@@ -52,9 +52,48 @@ export function stateMessage(state: string, carousel: string | null, m: Messages
   return i >= 0 ? m.steps[STEPS[i]].message : m.state.updating;
 }
 
+/** Aktarma bavulunun adımları (W10a): ilk uçuş, aktarma havalimanında indirme, aktarma hattı, bağlantı uçağı. */
+export const TRANSFER_STEPS: readonly TransferStep[] = [
+  "CHECKED_IN",
+  "SECURITY_SCREENED",
+  "LOADED_ON_AIRCRAFT",
+  "UNLOADED_AT_ARRIVAL",
+  "TRANSFER_SORTED",
+  "ONWARD_LOADED",
+];
+
+/** Bağlantı uçuşundaki satırın "yüklendi" ya da daha ileri durumları (varış tarafı bu havalimanında izlenmez). */
+const ONWARD_LOADED = new Set(["LOADED_ON_AIRCRAFT", "UNLOADED_AT_ARRIVAL", "INBOUND_CHUTE", "ON_CAROUSEL", "CLAIMED_FROM_BELT"]);
+
+export function isTransfer(bag: PassengerBag): boolean {
+  return bag.onwardFlightId !== null;
+}
+
+/**
+ * Aktarma bavulunun adım çubuğundaki yeri. Önce bağlantı uçuşundaki satıra bakılır (yüklendi, aktarma hattında); o henüz
+ * ilerlemediyse gelen uçuştaki satırın durumu gösterilir. TRANSFERRED (gelen satır aktarmaya devredildi) "Aktarmada" sayılır.
+ */
+export function transferStepIndex(bag: PassengerBag): number {
+  if (bag.onwardState !== null && ONWARD_LOADED.has(bag.onwardState)) return TRANSFER_STEPS.indexOf("ONWARD_LOADED");
+  if (bag.onwardState === "TRANSFER_SORTED" || bag.state === "TRANSFERRED") return TRANSFER_STEPS.indexOf("TRANSFER_SORTED");
+  return TRANSFER_STEPS.findIndex((s) => s === bag.state);
+}
+
+export function transferMessage(bag: PassengerBag, m: Messages): string {
+  if (bag.onwardState === "OFFLOADED_NO_SHOW") return m.transfer.onwardOffloaded;
+  if (bag.state === "OFFLOADED_NO_SHOW") return m.state.offloaded;
+  const i = transferStepIndex(bag);
+  if (i < 0) return m.state.updating;
+  const message = m.transfer.steps[TRANSFER_STEPS[i]].message;
+  // Takip bağlantı uçağına yüklemede biter; yolcuya bavulunu nerede alacağı söylenir.
+  return TRANSFER_STEPS[i] === "ONWARD_LOADED" && bag.onwardDestination ? `${message} ${m.transfer.collectAt(bag.onwardDestination)}` : message;
+}
+
 /** Kısa durum adı (operasyon tablosu için; personel ekranları şimdilik yalnızca Türkçe). */
 export function stateLabel(state: string): string {
   if (state === "OFFLOADED_NO_SHOW") return "Uçağa alınmadı";
+  if (state === "TRANSFER_SORTED") return MESSAGES.tr.transfer.steps.TRANSFER_SORTED.short;
+  if (state === "TRANSFERRED") return "Aktarmaya geçti";
   const step = STEPS.find((s) => s === state);
   return step ? MESSAGES.tr.steps[step].short : state;
 }

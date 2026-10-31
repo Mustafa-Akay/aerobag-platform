@@ -124,7 +124,7 @@ Demoda tek platform uçtan uca olayları alır. Gerçekte bu olaylar farklı kur
 
 | Durum | Davranış |
 | --- | --- |
-| **Aktarma bavulu** | Bu havalimanında `CHECKED_IN` olayı yoktur; yaşam döngüsü `UNLOADED_AT_ARRIVAL` ile başlar ve çıkış kuralları farklıdır (yolcu bu havalimanında çıkmayabilir) |
+| **Aktarma bavulu** | W10a'dan beri iki bağlı satır: gelen uçuştaki satır indirildikten sonra `TRANSFERRED` ile kapanır; bağlantı uçuşundaki satır aktarma BSM'siyle açılır, `TRANSFER_SORTED` ve `LOADED_ON_AIRCRAFT` adımlarından geçer (güvenlik okuması isteğe bağlı). Bavul bu havalimanında banda gelmez, çıkış kuralları uygulanmaz (ayrıntı: IMPLEMENTATION_STATUS, W10a) |
 | **Yüklenmemiş bavul** | `CHECKED_IN` var, uçuş kalktı ama `LOADED_ON_AIRCRAFT` yok → `ANOMALY: NOT_LOADED` |
 | **Yolcu uçağa binmedi** | Bavul uçaktan indirilir (no-show) → durum `OFFLOADED_NO_SHOW`, ETA üretilmez |
 | **Varışta eksik bavul** | Uçuşun tüm bavulları banta çıktı ama bu bavul çıkmadı → `ANOMALY: MISSING_AT_ARRIVAL`, operasyon ekranına kayıt |
@@ -617,7 +617,7 @@ Bunlar **modelleme varsayımlarıdır**, ölçüm değildir; gerçek operasyon y
 | Yoğun sezon dalgası | Kısa aralıklarla art arda gelen uçuşlar aynı bant grubunu paylaşır | `arrivalsLast30Min` özelliğini ve bant çakışmasını test eder |
 | Yağmurlu ve gecikmeli operasyon | Apron süreleri uzar | Dağılım kayması testi (rejim B) |
 | Eksik bavul | Uçuşun bavulları bitti, bir bavul gelmedi | `MISSING_AT_ARRIVAL` akışı |
-| Aktarma bavulu | Başka uçuştan gelen bavul | Durum makinesi istisnası |
+| Aktarma bavulu | Başka uçuştan gelen bavul | İki bağlı satır ve aktarma zinciri (W10a) |
 
 ---
 

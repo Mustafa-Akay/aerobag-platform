@@ -70,6 +70,40 @@ public class RetentionTests(PostgresFixture fx) : IClassFixture<PostgresFixture>
         Assert.Null(await Lookup().LookupAsync(pnr, "TUNA"));
     }
 
+    /// <summary>
+    /// Aktarma yolcusu (W10a): gelen uçuştaki satır aktarmaya devredilince (TRANSFERRED), bağlantı satırı da bağlantı uçağına
+    /// yüklenince bu havalimanındaki işi biter; iki yolcu kaydı da normal saklama süresiyle anonimleşir. Bağlantı uçağına
+    /// yüklenmemiş bavulun yolcusu teslim edilmemiş sayılır.
+    /// </summary>
+    [Theory]
+    [InlineData(true, 31, true)]
+    [InlineData(false, 31, false)]
+    [InlineData(false, 91, true)]
+    public async Task Transfer_passenger_is_anonymized_once_the_bag_is_on_the_connecting_flight(bool loadedOnward, int days, bool anonymized)
+    {
+        var pnr = NewPnr();
+        var tag = NewTag();
+        var p = new BaggageEventProcessor(fx.Db, new FixedClock(T0), Hasher);
+        string[] messages =
+        [
+            $"BSM\n.V/1LAYT\n.F/ZZ0802/22OCT/AYT/Y\n.O/ZZ5802/22OCT/ADB\n.N/{tag}001\n.W/K/1/18\n.P/TUNA/ECE\n.L/{pnr}\nENDBSM",
+            $"BSM\n.V/1LAYT\n.F/ZZ5802/22OCT/ADB/Y\n.I/ZZ0802/22OCT/FRA\n.N/{tag}001\n.W/K/1/18\n.P/TUNA/ECE\n.L/{pnr}\nENDBSM",
+            $"BUM\n.V/1LAYT\n.F/ZZ0802/22OCT/AYT\n.N/{tag}001\n.U/STAND104/20261022T121000Z\nENDBUM",
+            $"BPM\n.V/1LAYT\n.J/S/TRANSFER01/22OCT/122500Z\n.F/ZZ5802/22OCT/ADB\n.N/{tag}001\nENDBPM",
+        ];
+        foreach (var m in loadedOnward
+                     ? messages.Append($"BPM\n.V/1LAYT\n.J/S/LOAD01/22OCT/123500Z\n.F/ZZ5802/22OCT/ADB\n.N/{tag}001\nENDBPM")
+                     : messages)
+        {
+            await p.ProcessAsync(m, "test");
+        }
+        Assert.NotNull(await Lookup().LookupAsync(pnr, "TUNA"));
+
+        await Retention(TimeSpan.FromDays(days)).AnonymizeDueAsync();
+
+        Assert.Equal(anonymized, await Lookup().LookupAsync(pnr, "TUNA") is null);
+    }
+
     [Fact]
     public async Task App_role_can_change_only_the_key_columns_of_passengers()
     {

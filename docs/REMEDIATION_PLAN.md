@@ -2,7 +2,7 @@
 
 Bu plan, 27 Ekim 2026'daki eleştirel incelemenin bulgularını öncelik ve mimari katmana göre iş paketlerine çevirir. Amaç, sistemi bir havayolu ya da havalimanı operasyon uzmanının ilk soracağı sorulara cevap verebilir hale getirmektir. Fazlar 1-4 tamamdır; Faz 5 (RFID donanım demosu) isteğe bağlıdır ve bu planın dışındadır.
 
-Plan bir çalışma belgesidir: her paket bitince `IMPLEMENTATION_STATUS.md`'ye işlenir ve buradaki durum güncellenir.
+Plan bir çalışma belgesidir: her paket bitince anlatısı `CHANGELOG.md`'ye yazılır, `IMPLEMENTATION_STATUS.md` güncel durumu yansıtacak şekilde düzeltilir ve buradaki durum tablosu güncellenir.
 
 ## 1. Bulgular ve öncelik
 
@@ -138,7 +138,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 ## 4. Çalışma kuralları
 
 - Her paket kendi testleriyle gelir; test geçmeden sonraki pakete geçilmez.
-- Her paketin sonunda belgeler (`IMPLEMENTATION_STATUS.md`, gerekiyorsa `EVALUATION.md` ve `THREAT_MODEL.md`) güncellenir ve commit atılır.
+- Her paketin sonunda belgeler (`CHANGELOG.md`, `IMPLEMENTATION_STATUS.md`, gerekiyorsa `EVALUATION.md` ve `THREAT_MODEL.md`) güncellenir ve commit atılır.
 - Yeni varsayımların hepsi (oranlar, süreler) kodda tek yerde toplanır ve "demo varsayımı" olarak işaretlenir.
 - W1 bittikten sonra şema değişiklikleri `docker compose down -v` gerektirmez.
 
@@ -155,8 +155,8 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W7 Yük testi | Tamam (PR birleştirildi) |
 | W8 Öncelikli bavul | Ertelendi (sıranın sonunda yeniden değerlendirilecek) |
 | W9 İngilizce arayüz | Yolcu ekranı tamam (PR birleştirildi); personel ekranları ikinci adım |
-| W10a Aktarma bavulu: veri ve akış | Kod ve testler hazır, PR bekliyor (branch `faz6/w10a-transfer`) |
+| W10a Aktarma bavulu: veri ve akış | Tamam (PR #13 birleştirildi) |
 | W10b Aktarma bavulu: risk ve ölçüm | Sonraya bırakıldı (yeni özellik yok kararı, 31 Ekim) |
 | W11 ExitGuard maliyeti | Kapsam dışı (gerekçe yukarıda) |
 | W12a Yolcu jetonunun kapsamı | Tamam (PR birleştirildi) |
-| W12 Temizlik ve belgeler (kalanı) | Başlamadı |
+| W12 Temizlik ve belgeler (kalanı) | Ortak DB yardımcıları tamam (PR #14); `IMPLEMENTATION_STATUS` → kısa durum + `CHANGELOG` bu dalda (`faz6/w12-docs`) |

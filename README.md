@@ -91,7 +91,8 @@ cd ml; python -m pytest -q tests         # Python 3.12, ml/requirements.txt
 | Belge | İçerik |
 |---|---|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Hedef tasarım: fazlar, veri akışı, durum makinesi, sözleşmeler |
-| [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) | Kodun şu anki durumu, tasarımdan sapmalar, bilinen eksikler |
+| [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) | Kodun şu anki durumu, tasarımdan sapmalar, bilinen eksikler, yapılandırma |
+| [CHANGELOG.md](docs/CHANGELOG.md) | Her iş paketinin anlatısı, sınırları ve testleri (en yeni en üstte) |
 | [EVALUATION.md](docs/EVALUATION.md) | ML ve ExitGuard ölçümleri, olumsuz sonuçlar, simülatörün kamuya açık referanslarla karşılaştırması |
 | [THREAT_MODEL.md](docs/THREAT_MODEL.md) | STRIDE: her tehdit için önlem, test ve açık kalanlar |
 | [KVKK.md](docs/KVKK.md) | Kişisel verinin nereye gittiği, saklama süresi (hukuki danışmanlık değildir) |

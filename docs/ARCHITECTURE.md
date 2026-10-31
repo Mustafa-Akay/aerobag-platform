@@ -124,7 +124,7 @@ Demoda tek platform uçtan uca olayları alır. Gerçekte bu olaylar farklı kur
 
 | Durum | Davranış |
 | --- | --- |
-| **Aktarma bavulu** | W10a'dan beri iki bağlı satır: gelen uçuştaki satır indirildikten sonra `TRANSFERRED` ile kapanır; bağlantı uçuşundaki satır aktarma BSM'siyle açılır, `TRANSFER_SORTED` ve `LOADED_ON_AIRCRAFT` adımlarından geçer (güvenlik okuması isteğe bağlı). Bavul bu havalimanında banda gelmez, çıkış kuralları uygulanmaz (ayrıntı: IMPLEMENTATION_STATUS, W10a) |
+| **Aktarma bavulu** | W10a'dan beri iki bağlı satır: gelen uçuştaki satır indirildikten sonra `TRANSFERRED` ile kapanır; bağlantı uçuşundaki satır aktarma BSM'siyle açılır, `TRANSFER_SORTED` ve `LOADED_ON_AIRCRAFT` adımlarından geçer (güvenlik okuması isteğe bağlı). Bavul bu havalimanında banda gelmez, çıkış kuralları uygulanmaz (ayrıntı: CHANGELOG, W10a) |
 | **Yüklenmemiş bavul** | `CHECKED_IN` var, uçuş kalktı ama `LOADED_ON_AIRCRAFT` yok → `ANOMALY: NOT_LOADED` |
 | **Yolcu uçağa binmedi** | Bavul uçaktan indirilir (no-show) → durum `OFFLOADED_NO_SHOW`, ETA üretilmez |
 | **Varışta eksik bavul** | Uçuşun tüm bavulları banta çıktı ama bu bavul çıkmadı → `ANOMALY: MISSING_AT_ARRIVAL`, operasyon ekranına kayıt |

@@ -2,7 +2,9 @@
 
 `ARCHITECTURE.md` hedef tasarımı anlatır. Bu belge **şu an çalışan kodu** özetler: ne çalışıyor, tasarımdan nerede ayrışıyor, ne bilinçli olarak yok. Çelişki olursa bu belge koda daha yakındır; kodla çelişirse kod geçerlidir. Her iş paketinin ayrıntılı anlatısı, bilinen sınırları ve testleri [CHANGELOG.md](CHANGELOG.md)'dedir.
 
-Son güncelleme: 31 Ekim 2026 (Faz 6, W12).
+Son güncelleme: 31 Ekim 2026 (toparlama, T1).
+
+**Konum:** bir havayolunun bavul takip sisteminin tek istasyon modülü; yer hizmetleri ve havalimanı veri sağlayan taraf, ExitGuard isteğe bağlı havalimanı modülü (`ARCHITECTURE.md`, "Konumlandırma").
 
 ## Fazlar
 
@@ -15,7 +17,7 @@ Son güncelleme: 31 Ekim 2026 (Faz 6, W12).
 | 5. Donanım demosu (RFID) | Başlanmadı, isteğe bağlı |
 | 6. Sektör uyumu | Devam ediyor; paketler ve durum `REMEDIATION_PLAN.md` |
 
-**31 Ekim kararı:** yeni özellik eklenmiyor. Sıradaki işler W12'nin kalanı ve toparlama (demo senaryosu, README, tek sayfalık özet, gerçek veri planı).
+**31 Ekim kararı:** yeni özellik eklenmiyor. Faz 6'nın kod işi bitti; sıradaki iş toparlama: çerçeve (T1), kolay çalıştırma, demo senaryosu, README görselleri, tek sayfalık özet, gerçek veri planı. Ağa genişleme sektörden gelecek geri bildirime göre.
 
 ## Çalışan parçalar
 

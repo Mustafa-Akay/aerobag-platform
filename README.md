@@ -117,6 +117,7 @@ cd ml; python -m pytest -q tests         # Python 3.12, ml/requirements.txt
 | [EVALUATION.md](docs/EVALUATION.md) | ML ve ExitGuard ölçümleri, olumsuz sonuçlar, simülatörün kamuya açık referanslarla karşılaştırması |
 | [THREAT_MODEL.md](docs/THREAT_MODEL.md) | STRIDE: her tehdit için önlem, test ve açık kalanlar |
 | [KVKK.md](docs/KVKK.md) | Kişisel verinin nereye gittiği, saklama süresi (hukuki danışmanlık değildir) |
+| [DEMO.md](docs/DEMO.md) | 7–8 dakikalık gösterim akışı: hazırlık, hangi ekranda ne gösterilir, sık sorulanlar |
 
 ## Proje yapısı
 

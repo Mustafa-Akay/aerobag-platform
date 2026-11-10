@@ -1,6 +1,6 @@
 # AeroBag: gerçek veri planı
 
-Bu belge bir plandır, yapılmış bir işi anlatmaz. Bugün (10 Kasım 2026) elimizde gerçek veri de, sektörden bir bağlantı da yok. Amaç iki katmanlı: proje portfolyo olarak kullanılmaya devam eder; ilgi gelirse aynı adımlar bir pilota dönüşür.
+Bu belge bir plandır, yapılmış bir işi anlatmaz. Bugün (10 Kasım 2026) elimizde gerçek veri de, sektörden bir bağlantı da yok. Projenin amacı bir ürün satmak değil: havayolu şirketlerindeki yetkililerle bağlantı kurmak ve bu alanda çalışmış biri olarak görünmek. Gerçek veri bu konuşmanın somut konusudur; ilgi gelirse aynı adımlar bir pilota dönüşür.
 
 ## 1. Neden gerekiyor
 
@@ -47,12 +47,12 @@ Kayıp bavul kayıtları olmadan da 1 ve 3 ölçülür; 2 için yalnızca yanlı
 
 Hedef kişiler, öncelik sırasıyla:
 
-1. **Yer hizmetleri firmalarında bagaj operasyonu ya da BT** (okuma verisi onlarda ve havayolundan daha erişilebilir).
-2. **Havayollarında bagaj hizmetleri ve operasyon kontrol.**
+1. **Havayollarında bagaj hizmetleri, operasyon kontrol, dijital ürün ve BT.** Bavulun sorumluluğu ve yolcuya bilgi vermek havayolundadır; proje onların sorusuna cevap verir ve asıl hedef bu şirketlerdir.
+2. **Yer hizmetleri firmalarında bagaj operasyonu ya da BT.** Okuma verisi çoğu zaman onlardadır; havayolu "veri bizde değil" derse ikinci kapı.
 3. **Havalimanı işletmelerinde operasyon ve BT.**
 4. **Üniversitelerin havacılık yönetimi bölümleri:** sektörle veri anlaşması olan akademisyenler, ortak çalışma ya da tez verisi yoluyla.
 
-Kanal: LinkedIn ve e-posta ile kısa mesaj + özet + video. İş ve staj başvurularında proje ekte gider; mülakat aynı zamanda temas fırsatıdır. İstek küçük tutulur: önce 20 dakikalık görüşme, veri ikinci adım.
+Kanal: LinkedIn ve e-posta ile kısa mesaj + özet + video. İş ve staj başvurularında proje ekte gider; mülakat aynı zamanda temas fırsatıdır. İstek küçük tutulur: önce 20 dakikalık görüşme ve geri bildirim, veri ikinci adım. Havayolu veriyi kendisi veremese bile görüşme amaca hizmet eder.
 
 Gerçekçi beklenti: soğuk temasların çoğu cevapsız kalır. 20–30 kişiye yazmadan sonuç hakkında yargıya varılmaz.
 

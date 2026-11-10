@@ -24,9 +24,11 @@ namespace AeroBag.Infrastructure;
 /// alır (önce bağlantı, sonra gelen satır); gelen satırı işleyen işlem bağlantı satırına dokunmaz, böylece kilitlenme olmaz.
 /// </para>
 /// </remarks>
-public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider clock, LookupKeyHasher hasher, ReadCoverage? coverage = null)
+public sealed class BaggageEventProcessor(
+    NpgsqlDataSource db, TimeProvider clock, LookupKeyHasher hasher, ReadCoverage? coverage = null, EventTimePolicy? timePolicy = null)
 {
     private readonly ReadCoverage _coverage = coverage ?? ReadCoverage.Full;
+    private readonly EventTimePolicy _timePolicy = timePolicy ?? EventTimePolicy.Unlimited;
 
     public static readonly TimeSpan ExitDeadline = TimeSpan.FromSeconds(180);
 
@@ -45,6 +47,16 @@ public sealed class BaggageEventProcessor(NpgsqlDataSource db, TimeProvider cloc
         {
             await DeadLetterAsync(source, rawText, mapError ?? "Eşlenemedi.", ct);
             return ProcessResult.Reject(mapError ?? "Eşlenemedi.");
+        }
+
+        // Olay zamanı sınırı (yalnızca yapılandırıldıysa; gerçek saat modunda varsayılan 24 saat). Saati bozuk bir okuyucunun
+        // ya da yanlış tarihli bir mesajın SLA ve uyarı hesaplarına girmesini önler; mesaj kaybolmaz, ölü mektuba yazılır.
+        if (_timePolicy.MaxSkew is { } maxSkew && (ev!.OccurredAtUtc - received).Duration() > maxSkew)
+        {
+            var error = $"EventTimeOutOfRange: olay zamanı ({ev.OccurredAtUtc:yyyy-MM-dd'T'HH:mm:ss'Z'}) alınma anından " +
+                        $"{maxSkew.TotalHours:0.#} saatten fazla sapıyor.";
+            await DeadLetterAsync(source, rawText, error, ct);
+            return ProcessResult.Reject(error);
         }
 
         return await StoreAsync(ev!, rawText ?? string.Empty, received, source, ct);

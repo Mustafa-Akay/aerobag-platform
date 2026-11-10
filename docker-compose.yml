@@ -6,7 +6,8 @@ services:
       POSTGRES_PASSWORD: aerobag_dev
       POSTGRES_DB: aerobag
     ports:
-      - "5433:5432"   # 5433: bilgisayarındaki olası yerel Postgres ile çakışmasın
+      # Yalnızca yerel makineye açık (ML servisi gibi): parola depoda yazılı bir geliştirme parolasıdır, ağa açılmamalı.
+      - "127.0.0.1:5433:5432"   # 5433: bilgisayarındaki olası yerel Postgres ile çakışmasın
     # Şemayı göç aracı kurar: dotnet run --project src\AeroBag.Core\AeroBag.Migrator (db/migrations).
     volumes:
       - pgdata:/var/lib/postgresql/data

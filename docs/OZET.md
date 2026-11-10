@@ -23,7 +23,7 @@ Bavul kaybolduğunda yolcunun başvurduğu ve sorumlu tutulan taraf havayoludur;
 - **Mesajlar:** Type B (BSM, BUM, BPM) sıkı sınırlarla ayrıştırılır; çift gelen tekilleştirilir, sırasız gelen durumu geri almaz, bozuk olan ayrı tabloya düşer.
 - **Kişisel veri:** ad, soyad ve PNR hiçbir tabloda ya da kayıtta düz metin durmaz; saklama süresi dolunca arama özetleri de silinir. Tehdit modeli ve KVKK notu depoda.
 - **Yük:** yerel makinede saniyede ~1.800 mesaj, p95 59 ms; yoğun bir havalimanının yoğun saati için hesaplanan ihtiyaç ~17 mesaj/sn.
-- **Kalite:** 411 otomatik test (gerçek PostgreSQL üzerinde entegrasyon testleri dahil), her gönderimde çalışır.
+- **Kalite:** 416 otomatik test (gerçek PostgreSQL üzerinde entegrasyon testleri dahil), her gönderimde çalışır.
 - **Teknoloji:** .NET 10, PostgreSQL, Python (LightGBM), React. Yolcu ekranı Türkçe ve İngilizce.
 - **İsteğe bağlı modül:** çıkış kapısında bavul–PNR eşleştirmesi (ExitGuard), havalimanının kurabileceği ayrı bir parça.
 

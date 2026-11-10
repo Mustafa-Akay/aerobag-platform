@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Yolcu adı ve soyadı | BSM mesajı (`.P/`) | Hiçbir şey; yalnızca PNR ile birlikte HMAC özeti (`lookup_key`) | Düz metin ad/soyad (ham mesaj metninde de maskelenir) |
 | PNR | BSM mesajı (`.L/`) | HMAC özetleri: `lookup_key` (PNR + soyad) ve `pnr_key` (yalnızca PNR, ayrı önekle) | Düz metin PNR |
-| Yolcunun sorguda girdiği PNR ve soyad | Yolcu sayfası (`POST` gövdesi) | Hiçbir şey; yalnızca bellekte özetlenir | Sunucu istek kayıtlarında da yer almaz (adres kayıtları kapatıldı) |
+| Yolcunun sorguda girdiği PNR ve soyad | Yolcu sayfası (`POST` gövdesi) | Hiçbir şey; yalnızca bellekte özetlenir | Sunucu istek kayıtlarında da yer almaz (adres kayıtları kapatıldı). Tarayıcı depolamasına da yazılmaz: son arama yalnızca sayfanın belleğindedir, sayfa yenilenince ya da sekme kapanınca kaybolur |
 | Kapıda sunulan PNR | Kapı sensörü paketi | Hiçbir şey; bellekte özetlenip karşılaştırılır | Kapı okuması ve inceleme kayıtlarında yoktur (testle doğrulanır) |
 | Bavul etiketi, uçuş, olay zamanları | Type B mesajları | Saklanır | Doğrudan kişiyi tanımlamaz; ama arama özetiyle bağlıyken kişisel veriyle ilişkilidir |
 | Personel kullanıcı adı | Giriş | İnceleme kaydını kimin kapattığı (`resolved_by`) | Parola (yalnızca PBKDF2 özeti, yapılandırmada) |

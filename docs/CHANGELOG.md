@@ -4,6 +4,17 @@ Her iş paketinin ne yaptığı, neden yaptığı, bilinen sınırları ve testl
 
 Bu girdiler yazıldıkları andaki durumu anlatır; sonraki bir paket bir sınırı kapatmış olabilir (örneğin W4'te "W12'ye not edildi" denen jeton kapsamı W12a'da kapandı). W1 öncesindeki girdilerdeki "şema değişti, `docker compose down -v` gerekir" notları kaldırıldı: şema artık göçlerle güncellenir, veri korunur.
 
+## Güvenlik incelemesi düzeltmeleri (10 Kasım 2026)
+
+Dışarıya açılmadan önce yapılan kod incelemesinde bulunan dört açık kapatıldı. Kritik bir açık bulunmadı; bunlar "demo varsayılanlarıyla gerçek ortama çıkılırsa" türündendi.
+
+- **Geliştirme ortamı dışında demo varsayılanlarıyla açılmaz.** Bağlantı dizesi, arama anahtarı, kullanıcılar ya da mesaj kaynakları verilmemişse ve ortam `Development` değilse API açılışta durur ve eksik ayarları söyler. Önceden yalnızca günlüğe uyarı yazıyordu (arama anahtarı ve bağlantı dizesi için uyarı bile yoktu): yanlış yapılandırılmış bir kurulum README'deki parolalarla yayına çıkabilirdi. Yerelde `dotnet run` geliştirme ortamını `Properties/launchSettings.json` ile seçer; `scripts\demo` ve README'deki komutlar değişmedi.
+- **PostgreSQL yalnızca yerel makineye açık.** `docker-compose.yml` portu `127.0.0.1:5433` olarak yayınlar (ML servisi zaten böyleydi). Önceden bütün ağ arayüzlerine açıktı ve süper kullanıcı parolası depoda yazılıydı; demo sırasında aynı ağdaki biri bağlanabilirdi. API ve göç aracının varsayılan bağlantısı `localhost` yerine `127.0.0.1` (Windows önce IPv6'yı dener).
+- **PNR ve soyad tarayıcıda saklanmaz.** Yolcu sayfası son aramayı `sessionStorage`'a düz metin yazıyordu. Artık yalnızca sayfanın belleğinde tutulur: yolcu sayfası ile operasyon panosu arasında geçişte korunur, yenilemede kaybolur. Eski sürümden kalan kayıt açılışta silinir.
+- **Olay zamanı sınırı.** Gerçek saat modunda (`Clock:Mode=real`) alınma anından 24 saatten fazla sapan olay reddedilir ve ölü mektuba yazılır (`Ingest:MaxEventTimeSkewHours`; 0 kapatır). Simülasyonda olay zamanı sanal olduğu için varsayılan olarak kapalıdır.
+- **Bilinen sınırlar:** simülasyon modunda (`event`) operasyon saati hâlâ en son olaydan türer; ileri tarihli tek bir mesaj saati ileri atar (bu modun doğası; demo veritabanı temizlenerek giderilir). Kapı paketleri ve AODB kilometre taşlarının zamanları için sınır yok. Uygulama rolünün parolası göç betiğinde sabit (göçler değişmez); gerçek kurulumda `ALTER ROLE` gerekir. Hız sınırı ters vekil arkasında bağlantı IP'sine göre çalışır. İnceleme kod üzerinden yapıldı; çalışan sisteme sızma testi yapılmadı.
+- **Testler:** `HardeningTests` (üretim ortamında demo varsayılanlarıyla açılmama, bütün ayarlar verilince açılma ve demo kullanıcının kapanması, zaman sınırı içi ve dışı, sınırsız kipte eski davranış). Canlı doğrulama: demo açıldı, veritabanı yalnızca `127.0.0.1`'de dinliyor, sorgudan sonra tarayıcı depolaması boş. Toplam 416 .NET testi.
+
 ## Toparlama, T2: tek komutla çalıştırma
 
 - **Sorun:** demoyu açmak beş komut, dört pencere ve doğru sıra gerektiriyordu. 31 Ekim'de iki tuzak yaşandı: takılan Docker motoru testleri dakikalarca bekletti; kapanmamış süreçler Windows'un bellek sınırını doldurdu, Node `Fatal process out of memory: Zone` ile çöktü.

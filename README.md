@@ -153,3 +153,7 @@ cd ml; python -m pytest -q tests         # Python 3.12, ml/requirements.txt
 - **Yerel kurulum:** TLS, anahtar kasası, anahtar döndürme ve çok örnekli kurulum kapsam dışı. Depodaki anahtarlar ve parolalar geliştirme varsayılanlarıdır.
 - **Uçuş bağlamı:** gövde tipi, hava ve mesafeler gibi bilgiler gerçek bir uçuş bilgi sisteminden değil, simülatörden geliyor.
 - **Faz 5:** RFID çıkış kapısı donanım demosu isteğe bağlıdır ve yapılmadı.
+
+## Lisans
+
+Tüm hakları saklıdır. Depo okunması ve değerlendirilmesi için yayımlanmıştır: kodu inceleyebilir ve değerlendirme amacıyla kendi bilgisayarınızda çalıştırabilirsiniz. Gerçek ortamda kullanmak, değiştirmek, dağıtmak ya da türev çalışma üretmek için yazarın yazılı izni gerekir. Ayrıntı: [LICENSE](LICENSE).

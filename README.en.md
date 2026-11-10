@@ -157,3 +157,7 @@ All documents below are in Turkish.
 - **Flight context:** aircraft type, weather and distances come from the simulator, not from a real flight information system.
 - **Integration:** messages are a simplified Type B over HTTP; there is no connection to SITA messaging, DCS, BRS, AODB or WorldTracer.
 - **Phase 5:** the RFID exit gate hardware demo is optional and was not built.
+
+## Licence
+
+All rights reserved. The repository is published to be read and evaluated: you may inspect the code and run it on your own machine for evaluation. Using it in production, modifying it, distributing it or creating derivative works requires the author's written permission. Details: [LICENSE](LICENSE).

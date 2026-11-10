@@ -1,5 +1,7 @@
 # AeroBag
 
+**Türkçe** | [English](README.en.md)
+
 ![ci](https://github.com/Mustafa-Akay/aerobag-platform/actions/workflows/ci.yml/badge.svg)
 
 Bir **havayolunun bavul takip sistemi** için tek istasyon modülü: bavulun check-in'den banda ya da bağlantı uçağına kadar yolculuğunu izler ve üç soruya cevap verir:

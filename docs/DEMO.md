@@ -22,7 +22,7 @@ Simülatör penceresi gönderime başlamadan önce üç liste yazar. Bunları bi
 | `Senaryo bavulları` (yüklenmeyecek / varışta indirilmeyecek) | Adım 4: kayıp bavul |
 | `Aktarma bavulları (örnek)` (yetişen ve yetişmeyen) | Adım 5: aktarma |
 
-**`Senaryo bavulları` listesi çıkmazsa:** 3 uçuşta (~360 bavul) beklenen senaryo bavulu sayısı ~2'dir; tohuma göre hiç çıkmayabilir. `scripts\demo -Stop`, `docker compose down -v`, sonra başka bir tohumla `scripts\demo -Seed 7` deneyin. Çalışan tohumu bu belgeye yazın.
+**`Senaryo bavulları` listesi çıkmazsa:** 3 uçuşta (~360 bavul) beklenen senaryo bavulu sayısı ~2'dir; tohuma göre hiç çıkmayabilir. `scripts\demo -Stop`, `docker compose down -v`, sonra başka bir tohumla `scripts\demo -Seed 7` deneyin. Varsayılan tohumda (42) senaryo bavulu çıkmaz. 10 Kasım 2026 denemesi: tohum 1 ve 11 ilk uçuşta yüklenmeyen bavul üretir (uyarı en erken görünür); 2, 5, 7, 9 ve 12 de senaryo bavulu üretir; 3, 4, 6 ve 10 üretmez.
 
 Tarayıcıda üç sekme açın:
 

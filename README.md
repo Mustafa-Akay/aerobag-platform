@@ -17,6 +17,12 @@ Neden havayolu: bavul kaybolduğunda sorumlu olan ve yolcunun başvurduğu taraf
 | ![Yolcu sayfası, indirme öncesi](docs/images/passenger-before-unload.png) | ![Yolcu sayfası, bavul indirildi](docs/images/passenger-unloaded.png) |
 | **Operasyon panosu ve teslim hedefi riski** | **Güvenlik ekranı: çıkış inceleme kayıtları** |
 | ![Operasyon panosu](docs/images/ops-dashboard.png) | ![Güvenlik inceleme kayıtları](docs/images/security-reviews.png) |
+| **Yolcu: bavulun yüklendiğine dair kayıt yok** | **Operasyon: eksik bavullar** |
+| ![Yolcu sayfası, yüklenmeyen bavul uyarısı](docs/images/passenger-not-loaded.png) | ![Eksik bavullar tablosu](docs/images/ops-alerts.png) |
+| **Yolcu: aktarma bavulu bağlantı uçağında** | **Yolcu: bavul bağlantıya yetişmedi** |
+| ![Yolcu sayfası, aktarma bavulu yüklendi](docs/images/passenger-transfer.png) | ![Yolcu sayfası, kaçırılan bağlantı](docs/images/passenger-missed-connection.png) |
+| **Operasyon: aktarma bavulları ve kabul kapanışı** | **Yolcu sayfası İngilizce** |
+| ![Aktarma bavulları panosu](docs/images/transfer-board.png) | ![Yolcu sayfası, İngilizce](docs/images/passenger-english.png) |
 
 ## Öne çıkanlar
 

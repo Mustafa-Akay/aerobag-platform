@@ -163,6 +163,6 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | Toparlama T1: havayolu çerçevesi (README, ARCHITECTURE v2.2) | Tamam (PR #16) |
 | Toparlama T2: tek komutla çalıştırma (`scripts\demo`) | Tamam (PR #17) |
 | Toparlama T3: demo senaryosu (`DEMO.md`) | Tamam (PR #18) |
-| Toparlama: README görselleri | Sırada |
+| Toparlama: README görselleri (kayıp bavul, aktarma, İngilizce) | Tamam |
 | Toparlama: tek sayfalık özet (`OZET.md`) | Tamam |
 | Toparlama: gerçek veri planı (`GERCEK_VERI_PLANI.md`) | Tamam (plan yazıldı; temas ve veri bekliyor) |

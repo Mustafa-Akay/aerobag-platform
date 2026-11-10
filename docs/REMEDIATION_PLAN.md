@@ -161,4 +161,8 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | W12a Yolcu jetonunun kapsamı | Tamam (PR birleştirildi) |
 | W12 Temizlik ve belgeler (kalanı) | Tamam (PR #14 ortak DB yardımcıları, PR #15 `IMPLEMENTATION_STATUS` + `CHANGELOG`) |
 | Toparlama T1: havayolu çerçevesi (README, ARCHITECTURE v2.2) | Tamam (PR #16) |
-| Toparlama T2: tek komutla çalıştırma (`scripts\demo`) | Bu dalda (`faz6/t2-demo-script`) |
+| Toparlama T2: tek komutla çalıştırma (`scripts\demo`) | Tamam (PR #17) |
+| Toparlama T3: demo senaryosu (`DEMO.md`) | Tamam (PR #18) |
+| Toparlama: README görselleri | Sırada |
+| Toparlama: tek sayfalık özet | Sırada |
+| Toparlama: gerçek veri planı | Sırada |

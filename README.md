@@ -47,7 +47,7 @@ Neden havayolu: bavul kaybolduğunda sorumlu olan ve yolcunun başvurduğu taraf
 
 **İsteğe bağlı modül: çıkış doğrulama (ExitGuard), yanlış alarm maliyetiyle birlikte ölçüldü.** Kapıda okunan bavul ile sunulan PNR'ın özeti karşılaştırılır. Aynı rezervasyondaki yolcular birbirinin bavulunu alabilir, uyuşmazlık kapıda alarm değil sessiz bir inceleme kaydı üretir. Varsayılan sensör hatalarıyla yapılan 27.000 bavulluk simülasyonda vakaların %87'si yakalandı ve hiçbiri sahip diye geçmedi. Meşru okumaların %1,38'i yanlış alarma dönüştü. Vaka çok nadir olduğu için açılan incelemelerin yalnızca yaklaşık %24'ü gerçek (taban oran etkisi). Kapıda alarm yerine insan incelemesi seçilmesinin gerekçesi bu.
 
-**411 .NET testi**, birim testleri ve Testcontainers ile gerçek PostgreSQL üzerinde çalışan entegrasyon testleri. Bunlara ek olarak ML tarafı için Python testleri var. Hepsi her `push`'ta GitHub Actions'ta çalışır.
+**416 .NET testi**, birim testleri ve Testcontainers ile gerçek PostgreSQL üzerinde çalışan entegrasyon testleri. Bunlara ek olarak ML tarafı için Python testleri var. Hepsi her `push`'ta GitHub Actions'ta çalışır.
 
 ## Mimari
 
@@ -104,7 +104,7 @@ dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --mode live --speed 5
 - **Aktarma bavulu:** canlı modda bavulların ~%6'sı aktarma bavuludur (`--transfer-rate`, demo varsayımı): banda değil, buradan kalkan bir bağlantı uçuşuna (ZZ5xxx) gider. Yolcu kartı iki uçuşu tek yolculuk olarak gösterir; operasyon panosunda "Aktarma bavulları" bölümü bağlantı uçuşu başına sayaçları ve bavul kabul kapanışını (`Transfer__CutoffMinutes`, varsayılan 15) gösterir.
 - **Şema değişince:** göç aracını yeniden çalıştırın; veri korunur. API, veritabanı kodun beklediği sürümde değilse açılmaz ve ne yapılacağını söyler.
 
-Gerçek bir kurulumda verilmesi gereken anahtarlar (`Auth__SigningKey`, `Ingest__Sources__*`, `Security__LookupKeySecret`, `ConnectionStrings__Default`) ve simülatörün bütün seçenekleri (`--help`) için [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md)'ye bakın.
+Depodaki parolalar ve anahtarlar yalnızca yerel demo içindir: API, geliştirme ortamı dışında (`ASPNETCORE_ENVIRONMENT` `Development` değilken) bunlarla açılmayı reddeder; `dotnet run` yerelde geliştirme ortamını kendisi seçer. Gerçek bir kurulumda verilmesi gereken anahtarlar (`Auth__Users__*`, `Auth__SigningKey`, `Ingest__Sources__*`, `Security__LookupKeySecret`, `ConnectionStrings__Default`) ve simülatörün bütün seçenekleri (`--help`) için [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md)'ye bakın.
 
 ## Testler
 

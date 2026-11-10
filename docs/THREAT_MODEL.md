@@ -36,7 +36,7 @@ Bu belge, **şu an çalışan kodun** güvenlik durumunu anlatır: her tehdit i�
 
 Açık kalanlar:
 - Gizli anahtarlar simetrik (HMAC ve JWT); anahtar döndürme yok. mTLS ya da asimetrik imza daha güçlüdür.
-- Demo kullanıcıları, demo kaynağı ve geliştirme anahtarları kodda ve README'de yazılıdır; yapılandırmada gerçek değerler verilince devre dışı kalırlar.
+- Demo kullanıcıları, demo kaynağı ve geliştirme anahtarları kodda ve README'de yazılıdır; yapılandırmada gerçek değerler verilince devre dışı kalırlar. Geliştirme ortamı dışında API bunlarla açılmayı reddeder (`HardeningTests`, 10 Kasım 2026).
 - Yolcunun "kimliği" PNR + soyaddır. PNR'ı ve soyadı bilen herkes o yolcunun bavul durumunu görebilir (havayolu sitelerindeki yaygın modelle aynıdır).
 
 ### Tampering (kurcalama)
@@ -52,6 +52,8 @@ Açık kalanlar:
 Açık kalanlar:
 - Süper kullanıcı tetikleyiciyi kapatabilir; veritabanı yöneticisine karşı olay zinciri özeti (hash chain) ya da harici değiştirilemez kayıt yok.
 - Nonce önbelleği bellektedir, tek örnek varsayar ve yeniden başlatmada sıfırlanır.
+- Olay zamanı: gerçek saat modunda alınma anından 24 saatten fazla sapan olay ölü mektuba gider (`HardeningTests`). Simülasyon modunda sınır yoktur; kapı paketleri ve AODB kilometre taşlarının zamanları da sınırlanmaz.
+- Uygulama rolünün parolası göç betiğinde sabittir (göçler değişmez); gerçek kurulumda `ALTER ROLE` ile değiştirilmelidir.
 - Yerel kurulumda TLS yok; ağ üzerinde jeton ve gövde açık gider.
 - Bağımlılık denetimi yalnızca bilinen açıkları yakalar; sürümler kilitlenmediği için (`>=`) ML bağımlılıkları kurulumdan kuruluma değişebilir. npm denetimi geliştirme araçlarını kapsamaz.
 
@@ -84,7 +86,9 @@ Açık kalanlar:
 Açık kalanlar:
 - Dağıtık IP'lerden PNR + soyad denemesine karşı IP başına sınır yetersizdir (CAPTCHA, hesap düzeyi sınır yok).
 - Canlı kanal jetonu WebSocket için adreste (`access_token`) gider; API kayıtları kapatıldı ama bir ters vekil sunucu bunu kaydedebilir.
-- Personel jetonu tarayıcıda `sessionStorage`'dadır; arayüzde bir XSS açığı olursa okunabilir (HttpOnly çerez kullanılmadı).
+- Personel jetonu tarayıcıda `sessionStorage`'dadır; arayüzde bir XSS açığı olursa okunabilir (HttpOnly çerez kullanılmadı). Yolcunun PNR'ı ve soyadı tarayıcı depolamasına yazılmaz (10 Kasım 2026'dan beri yalnızca sayfa belleğinde).
+- Yerel kurulumda PostgreSQL ve ML servisi yalnızca `127.0.0.1`'e açıktır; depodaki veritabanı parolaları geliştirme parolasıdır.
+- Hız sınırı bağlantının IP'sine göredir; ters vekil arkasında `ForwardedHeaders` yapılandırılmadan doğru çalışmaz.
 - ML servisi kimlik doğrulaması istemez; yalnızca `127.0.0.1`'e açıktır.
 
 ### Denial of service (hizmet engelleme)

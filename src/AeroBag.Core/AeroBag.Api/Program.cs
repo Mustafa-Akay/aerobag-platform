@@ -23,11 +23,25 @@ builder.Logging.AddFilter("Microsoft.AspNetCore.Routing.EndpointMiddleware", Log
 // Her yanıt için "JSON yazıldı / durum kodu" satırları; değer içermez ama konsolu boğar.
 builder.Logging.AddFilter("Microsoft.AspNetCore.Http.Result", LogLevel.Warning);
 
-var connectionString = builder.Configuration.GetConnectionString("Default")
-    ?? "Host=localhost;Port=5433;Database=aerobag;Username=aerobag_app;Password=aerobag_app_dev"; // kısıtlı uygulama rolü (db/migrations/0001_init.sql)
+// Depoda yazılı geliştirme varsayılanına düşen ayarlar. Geliştirme ortamı dışında bunlardan biri bile varsa API açılmaz
+// (aşağıda, kimlik ve kaynak ayarları okunduktan sonra): yanlış yapılandırılmış bir kurulum demo parolalarıyla yayına çıkmasın.
+var insecureDefaults = new List<string>();
+
+var connectionString = builder.Configuration.GetConnectionString("Default");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    // Kısıtlı uygulama rolü (db/migrations/0001_init.sql). 127.0.0.1: docker-compose veritabanını yalnızca IPv4 yerel adreste yayınlar.
+    connectionString = "Host=127.0.0.1;Port=5433;Database=aerobag;Username=aerobag_app;Password=aerobag_app_dev";
+    insecureDefaults.Add("ConnectionStrings:Default");
+}
 
 // Yalnızca geliştirme varsayılanı; gerçek kurulumda ortam değişkeniyle (Security__LookupKeySecret) verilir.
-var lookupSecret = builder.Configuration["Security:LookupKeySecret"] ?? "dev-only-secret-change-me-0123456789";
+var lookupSecret = builder.Configuration["Security:LookupKeySecret"];
+if (string.IsNullOrWhiteSpace(lookupSecret))
+{
+    lookupSecret = "dev-only-secret-change-me-0123456789";
+    insecureDefaults.Add("Security:LookupKeySecret");
+}
 
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
@@ -177,6 +191,34 @@ var ingest = IngestSettings.FromConfiguration(builder.Configuration);
 builder.Services.AddSingleton(ingest);
 builder.Services.AddSingleton<SourceVerifier>();
 
+// Demo kullanıcıları (parolaları README'de) ve demo kaynağı (anahtarı kodda) da geliştirme varsayılanıdır.
+if (auth.UsingDemoUsers)
+{
+    insecureDefaults.Add("Auth:Users");
+}
+if (ingest.UsingDemoSource)
+{
+    insecureDefaults.Add("Ingest:Sources");
+}
+if (insecureDefaults.Count > 0 && !builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException(
+        $"Ortam '{builder.Environment.EnvironmentName}' ama şu ayarlar verilmemiş: {string.Join(", ", insecureDefaults)}. " +
+        "Bu ayarlar verilmeyince depoda yazılı demo parolaları ve anahtarları kullanılır; API bu yüzden yalnızca geliştirme " +
+        "ortamında (ASPNETCORE_ENVIRONMENT=Development) onlarla açılır. Gerçek değerleri ortam değişkeniyle verin " +
+        "(ör. ConnectionStrings__Default, Security__LookupKeySecret, Auth__Users__0__Username, Ingest__Sources__0__Id).");
+}
+
+// Olay zamanı sınırı: gerçek saatle çalışırken (Clock:Mode=real) alınma anından bu kadar saatten fazla sapan olay reddedilir
+// ve ölü mektuba yazılır (saati bozuk okuyucu, yanlış tarihli mesaj). Simülasyonda (event) olay zamanı sanal olduğu için
+// varsayılan olarak kapalıdır. Ingest:MaxEventTimeSkewHours ile değiştirilir; 0 kapatır.
+var skewHours = builder.Configuration.GetValue("Ingest:MaxEventTimeSkewHours", clockMode == ClockModes.Real ? 24.0 : 0.0);
+if (skewHours < 0 || double.IsNaN(skewHours))
+{
+    throw new InvalidOperationException("Ingest:MaxEventTimeSkewHours negatif olamaz (0 kapatır).");
+}
+builder.Services.AddSingleton(new EventTimePolicy(skewHours > 0 ? TimeSpan.FromHours(skewHours) : null));
+
 // Yolcu sorgusu PNR denemesine açık olduğu için IP başına dakikada 20 istekle sınırlı.
 // Personel girişi parola denemesine karşı IP başına dakikada 10 istekle sınırlı.
 builder.Services.AddRateLimiter(o =>
@@ -235,6 +277,14 @@ if (auth.SigningKeyIsEphemeral)
 if (auth.UsingDemoUsers)
 {
     app.Logger.LogWarning("Auth:Users verilmedi; demo kullanıcıları (ops, security) etkin. Yalnızca yerel demo içindir.");
+}
+if (insecureDefaults.Contains("Security:LookupKeySecret"))
+{
+    app.Logger.LogWarning("Security:LookupKeySecret verilmedi; depoda yazılı geliştirme anahtarı kullanılıyor. Yalnızca yerel demo içindir.");
+}
+if (insecureDefaults.Contains("ConnectionStrings:Default"))
+{
+    app.Logger.LogWarning("ConnectionStrings:Default verilmedi; yerel demo veritabanı ve geliştirme parolası kullanılıyor.");
 }
 
 if (clockMode == ClockModes.Event)

@@ -2,7 +2,7 @@
 
 `ARCHITECTURE.md` hedef tasarımı anlatır. Bu belge **şu an çalışan kodu** özetler: ne çalışıyor, tasarımdan nerede ayrışıyor, ne bilinçli olarak yok. Çelişki olursa bu belge koda daha yakındır; kodla çelişirse kod geçerlidir. Her iş paketinin ayrıntılı anlatısı, bilinen sınırları ve testleri [CHANGELOG.md](CHANGELOG.md)'dedir.
 
-Son güncelleme: 31 Ekim 2026 (toparlama, T2).
+Son güncelleme: 10 Kasım 2026 (güvenlik incelemesi düzeltmeleri).
 
 **Konum:** bir havayolunun bavul takip sisteminin tek istasyon modülü; yer hizmetleri ve havalimanı veri sağlayan taraf, ExitGuard isteğe bağlı havalimanı modülü (`ARCHITECTURE.md`, "Konumlandırma").
 
@@ -44,7 +44,7 @@ Son güncelleme: 31 Ekim 2026 (toparlama, T2).
 | React arayüzü: yolcu sayfası (TR/EN), operasyon panosu, güvenlik ekranı | Çalışıyor; arayüzde test çalıştırıcısı yok |
 | Simülatör (tohumlu; canlı, CSV, ölçüm ve yük modları) | Birim testli |
 
-Testler: 411 .NET testi (birim + Testcontainers ile gerçek PostgreSQL), Python ML testleri. Docker sağlıklıyken `dotnet test` bir geliştirici dizüstünde ~40 sn sürer.
+Testler: 416 .NET testi (birim + Testcontainers ile gerçek PostgreSQL), Python ML testleri. Docker sağlıklıyken `dotnet test` bir geliştirici dizüstünde ~40 sn sürer.
 
 ## Tasarımdan ayrışan ve netleşen noktalar
 
@@ -78,11 +78,12 @@ Ortam değişkenlerinde `:` yerine `__` kullanılır (örn. `Auth__SigningKey`).
 
 | Anahtar | Varsayılan | Gerçek kurulumda |
 |---|---|---|
-| `ConnectionStrings:Default` | yerel `aerobag_app` rolü | kısıtlı uygulama rolüyle verilmeli |
+| `ConnectionStrings:Default` | yerel `aerobag_app` rolü | **verilmeli** (kısıtlı uygulama rolü; rolün parolası kurulumda `ALTER ROLE` ile değiştirilmeli) |
 | `Security:LookupKeySecret` | geliştirme değeri | **verilmeli** (HMAC arama anahtarı) |
 | `Auth:SigningKey` | her açılışta rastgele | **verilmeli** (çok örnekte ortak) |
-| `Auth:Users` | demo kullanıcılar | verilince demo kullanıcılar kapanır |
-| `Ingest:Sources` | demo `simulator` kaynağı | kaynak başına anahtar ve kapsamlar; verilince demo kaynak kapanır |
+| `Auth:Users` | demo kullanıcılar | **verilmeli**; verilince demo kullanıcılar kapanır |
+| `Ingest:Sources` | demo `simulator` kaynağı | **verilmeli**: kaynak başına anahtar ve kapsamlar; verilince demo kaynak kapanır |
+| `Ingest:MaxEventTimeSkewHours` | `event` saatinde kapalı, `real` saatinde 24 | olay zamanı alınma anından bu kadar saatten fazla sapıyorsa mesaj ölü mektuba gider; 0 kapatır |
 | `Clock:Mode` | `event` | `real` |
 | `Coverage:Profile` | `full` | kurulumdaki okuyucu yerleşimine göre |
 | `Alerts:NotLoadedGraceMinutes` / `Alerts:MissingGraceMinutes` | 10 / 5 | saha verisiyle yeniden seçilmeli |
@@ -90,6 +91,8 @@ Ortam değişkenlerinde `:` yerine `__` kullanılır (örn. `Auth__SigningKey`).
 | `ExitGuard:Enabled` / `ExitGuard:MinSignalQuality` | `true` / 0,6 | modül kullanılmıyorsa `false` |
 | `Ml:BaseUrl` / `Ml:TimeoutSeconds` | `http://127.0.0.1:8000` / 2 | boş verilirse ML kapalı |
 | `Retention:PersonalDataDays` / `Retention:UndeliveredDays` | 30 / 90 | KVKK politikasına göre |
+
+**Geliştirme ortamı dışında demo varsayılanı yok:** `ASPNETCORE_ENVIRONMENT` `Development` değilse ve `ConnectionStrings:Default`, `Security:LookupKeySecret`, `Auth:Users` ya da `Ingest:Sources` verilmemişse API açılmaz ve eksik ayarları söyler. Yerelde `dotnet run`, `Properties/launchSettings.json` üzerinden geliştirme ortamını seçer; yayımlanmış bir kurulum (ör. `dotnet AeroBag.Api.dll`, konteyner) üretim ortamında açılır.
 
 Simülatörün bütün seçenekleri: `dotnet run --project src\AeroBag.Core\AeroBag.Simulator -- --help`.
 

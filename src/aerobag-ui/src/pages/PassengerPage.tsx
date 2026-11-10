@@ -21,26 +21,26 @@ function errorKind(error: unknown): ErrorKind {
   return "network";
 }
 
-const STORAGE_KEY = "aerobag.lastQuery";
+/**
+ * Son arama yalnızca bellekte tutulur: yolcu sayfası ile operasyon panosu arasında geçişte korunur, sayfa yenilenince
+ * ya da sekme kapanınca kaybolur. PNR ve soyad tarayıcı depolamasına (sessionStorage, localStorage) yazılmaz; ortak
+ * kullanılan bir cihazda sonraki kişi okuyamasın diye (bkz. KVKK.md).
+ */
+let lastQuery: Query | null = null;
 
-/** Sayfalar arası geçişte aramayı korumak için; yalnızca bu sekmenin oturumunda tutulur. */
+// Eski sürümler son aramayı sessionStorage'a yazıyordu; kalıntıyı temizle.
+try {
+  sessionStorage.removeItem("aerobag.lastQuery");
+} catch {
+  // Depolama kapalıysa temizlenecek bir şey de yoktur.
+}
+
 function loadSaved(): Query | null {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const value = JSON.parse(raw) as Partial<Query>;
-    return typeof value.pnr === "string" && typeof value.surname === "string" ? { pnr: value.pnr, surname: value.surname } : null;
-  } catch {
-    return null;
-  }
+  return lastQuery;
 }
 
 function save(query: Query): void {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(query));
-  } catch {
-    // Depolama kapalıysa arama yine çalışır, yalnızca hatırlanmaz.
-  }
+  lastQuery = query;
 }
 
 export function PassengerPage() {

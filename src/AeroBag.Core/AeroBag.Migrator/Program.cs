@@ -5,7 +5,7 @@ using Npgsql;
 // Bağlantı: --connection "<dizi>" ya da AEROBAG_MIGRATION_CONNECTION; ikisi de yoksa yalnızca yerel demo için olan varsayılan.
 // Seçenekler: --status (yalnızca listeler, değiştirmez).
 
-const string DemoOwnerConnection = "Host=localhost;Port=5433;Database=aerobag;Username=aerobag;Password=aerobag_dev";
+const string DemoOwnerConnection = "Host=127.0.0.1;Port=5433;Database=aerobag;Username=aerobag;Password=aerobag_dev";
 
 var connection = Arg("--connection") ?? Environment.GetEnvironmentVariable("AEROBAG_MIGRATION_CONNECTION") ?? DemoOwnerConnection;
 var statusOnly = args.Contains("--status");

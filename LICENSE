@@ -1,0 +1,86 @@
+AeroBag
+Copyright (c) 2026 Mustafa Akay. All rights reserved.
+Telif hakkı (c) 2026 Mustafa Akay. Tüm hakları saklıdır.
+
+================================================================================
+ENGLISH
+================================================================================
+
+This repository is published so that it can be read and evaluated. It is not
+open source software.
+
+Permitted without asking:
+
+  1. Viewing and reading the source code and documents.
+  2. Cloning the repository and building and running it on your own machine,
+     solely to evaluate the work (for example for a job application, an
+     interview, a technical review or an academic assessment).
+  3. Quoting short excerpts for review or discussion, with attribution to the
+     author and a link to this repository.
+
+Not permitted without the author's prior written permission:
+
+  1. Using the software or any part of it in production, in a product or
+     service, or for any commercial or operational purpose.
+  2. Copying, modifying, adapting, translating or creating derivative works
+     from the source code, design, documents or evaluation results, beyond
+     what is necessary for the evaluation described above.
+  3. Distributing, sublicensing, selling or publishing the software or any
+     derivative of it, in source or compiled form.
+  4. Presenting the software, its design or its results as your own work, or
+     removing or altering this notice or the author's name.
+
+No licence to any patent, trademark or other right is granted by implication.
+Third-party packages used by this project remain under their own licences.
+
+For any other use, including a pilot, a collaboration or a commercial licence,
+contact the author: https://github.com/Mustafa-Akay
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE SOFTWARE OR
+ITS USE. All data in this repository is simulated; the software has not been
+validated with real airline, airport or passenger data.
+
+================================================================================
+TÜRKÇE
+================================================================================
+
+Bu depo okunabilsin ve değerlendirilebilsin diye yayımlanmıştır. Açık kaynak
+yazılım değildir.
+
+İzin almadan yapılabilecekler:
+
+  1. Kaynak kodu ve belgeleri görüntülemek ve okumak.
+  2. Depoyu kopyalayıp kendi bilgisayarınızda derlemek ve çalıştırmak; yalnızca
+     çalışmayı değerlendirmek amacıyla (örneğin iş başvurusu, mülakat, teknik
+     inceleme ya da akademik değerlendirme).
+  3. İnceleme ya da tartışma için, yazarı ve bu depoyu kaynak göstererek kısa
+     alıntılar yapmak.
+
+Yazarın önceden verilmiş yazılı izni olmadan yapılamayacaklar:
+
+  1. Yazılımı ya da herhangi bir parçasını gerçek ortamda, bir ürün ya da
+     hizmette, ticari ya da operasyonel bir amaçla kullanmak.
+  2. Kaynak kodu, tasarımı, belgeleri ya da ölçüm sonuçlarını, yukarıdaki
+     değerlendirme için gerekenin ötesinde kopyalamak, değiştirmek, uyarlamak,
+     çevirmek ya da bunlardan türev çalışma üretmek.
+  3. Yazılımı ya da türevini kaynak ya da derlenmiş halde dağıtmak, alt lisansla
+     vermek, satmak ya da yayımlamak.
+  4. Yazılımı, tasarımını ya da sonuçlarını kendi çalışmanız gibi sunmak; bu
+     bildirimi ya da yazarın adını kaldırmak ya da değiştirmek.
+
+Hiçbir patent, marka ya da başka hak için zımni lisans verilmez. Bu projenin
+kullandığı üçüncü taraf paketler kendi lisanslarına tabidir.
+
+Pilot çalışma, iş birliği ya da ticari lisans dahil başka her kullanım için
+yazara ulaşın: https://github.com/Mustafa-Akay
+
+YAZILIM "OLDUĞU GİBİ" SUNULUR; AÇIK YA DA ZIMNİ HİÇBİR GARANTİ VERİLMEZ. YAZAR,
+YAZILIMDAN YA DA KULLANIMINDAN DOĞAN HİÇBİR TALEP, ZARAR YA DA SORUMLULUKTAN
+SORUMLU TUTULAMAZ. Bu depodaki bütün veri simülasyondur; yazılım gerçek havayolu,
+havalimanı ya da yolcu verisiyle doğrulanmamıştır.
+
+İki dil arasında fark olursa İngilizce metin geçerlidir.
+In case of any difference between the two languages, the English text prevails.

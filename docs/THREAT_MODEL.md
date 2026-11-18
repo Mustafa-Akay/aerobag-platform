@@ -141,3 +141,22 @@ Otomatik güvenlik testleri gerçek API ve gerçek PostgreSQL ile (Testcontainer
 Yanlış alarm ölçümü: `EVALUATION.md`, "ExitGuard" bölümü (`--mode gate-eval`).
 
 Bu testler bilinen saldırı yollarını dener; bağımsız bir sızma testi ya da kod denetimi yerine geçmez.
+
+## 5. Bilinen bağımlılık bulguları
+
+Son kontrol: 18 Kasım 2026 (`npm audit`, `src/aerobag-ui`).
+
+| Bulgu | Zincir | Değerlendirme |
+|---|---|---|
+| `picomatch` ≤ 4.0.7: tekrarlı tek dallı extglob desenleriyle ReDoS (GHSA-fc5q-39xc-vjpf, CVE-2026-112366, CVSS 7.5) | `vite` → `picomatch`; `vite` → `fdir` → `picomatch`; `vite` → `tinyglobby` → `picomatch` | Projeyi etkilemediği değerlendirildi; gerekçe aşağıda |
+
+`npm audit` bu tek açığı dört "yüksek" bulgu olarak sayar (`picomatch`, `fdir`, `tinyglobby`, `vite`). Asıl açık `picomatch`'tedir, diğer üçü ona bağımlı oldukları için listelenir.
+
+Neden etkilemediği:
+- Zincirdeki bütün paketler yalnızca geliştirme ve derleme aracıdır (devDependency). `npm audit --omit=dev` 0 açık bulur; CI da bu komutla denetler (`--audit-level=high`). Tarayıcıya giden `dist/` paketinde `picomatch` yoktur.
+- Açığın tetiklenmesi için glob **deseninin** saldırganın elinde olması gerekir. Vite'ta desenler geliştiricinin yapılandırmasından ve kodundan gelir; HTTP isteği yalnızca eşlenen yolu belirler. `vite.config.ts`'te glob deseni yoktur, `src/` altında `import.meta.glob` kullanılmaz, Vite'ın varsayılan `fs.deny` desenleri extglob içermez. Geliştirme sunucusu yalnızca localhost'u dinler.
+
+Açık kalanlar:
+- Düzeltilmiş sürüm henüz yok: açık `picomatch`'in yayımlanmış son sürümünü (4.0.7) de kapsar, en yeni Vite (8.x) de `picomatch ^4.0.7` ister. `npm audit fix --force`'un önerdiği `vite@6.2.7` bir geri dönüştür ve kullanılmaz.
+- Düzeltme yayımlanınca `npm update picomatch` (gerekirse `package.json`'da `overrides`), ardından `npm ls picomatch`, `npm audit` ve `npm run build` ile doğrulanır.
+- Biri yapılandırmaya ya da koda kötü niyetli bir desen ekleyebilirse geliştirme makinesinde `npm run dev` / `npm run build` takılabilir. Bu kişi zaten kod çalıştırabildiği için ek bir yetki sağlamaz.

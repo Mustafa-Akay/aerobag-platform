@@ -152,6 +152,8 @@ cd ml; python -m pytest -q tests         # Python 3.12, ml/requirements.txt
 - **ExitGuard oranları:** benim koyduğum sensör varsayımlarına bağlı, sahada ölçülmedi.
 - **Yerel kurulum:** TLS, anahtar kasası, anahtar döndürme ve çok örnekli kurulum kapsam dışı. Depodaki anahtarlar ve parolalar geliştirme varsayılanlarıdır.
 - **Uçuş bağlamı:** gövde tipi, hava ve mesafeler gibi bilgiler gerçek bir uçuş bilgi sisteminden değil, simülatörden geliyor.
+- **Bagaj mutabakatı:** yükleme yetkisi kararı (uçağa binmeyen yolcunun bagajını yükletmeme) ve el terminaliyle okutma yapılmaz. AeroBag mutabakat sisteminin ürettiği okumaları ve indirme kayıtlarını alır. Sonraki geliştirme aşamasına bırakıldı ([W13](docs/REMEDIATION_PLAN.md)).
+- **Entegrasyon:** mesajlar HTTP üzerinden basitleştirilmiş Type B'dir; SITA mesajlaşması, DCS, BRS, AODB ya da WorldTracer ile bağlantı yok.
 - **Faz 5:** RFID çıkış kapısı donanım demosu isteğe bağlıdır ve yapılmadı.
 
 ## Lisans

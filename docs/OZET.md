@@ -29,7 +29,7 @@ Bavul kaybolduğunda yolcunun başvurduğu ve sorumlu tutulan taraf havayoludur;
 
 ## Sınırı ve sizden istediğim
 
-Sonuçların hepsi simülasyondan; simülatör ile model aynı varsayımlardan doğduğu için rakamlar iyimser olabilir. Gerçek veriyle yeniden ölçmek istediğim üç şey var:
+Sonuçların hepsi simülasyondan; simülatör ile model aynı varsayımlardan doğduğu için rakamlar iyimser olabilir. Bagaj mutabakatı (yükleme yetkisi kararı ve el terminaliyle okutma) bu sürümde yok; sistem mutabakat sisteminin okumalarını alır, bu kısım sonraki geliştirme aşamasına bırakıldı. Gerçek veriyle yeniden ölçmek istediğim üç şey var:
 
 1. Kayıp bavul uyarısının tolerans süreleri,
 2. Tahmin modelinin gerçek bir istasyondaki hatası,

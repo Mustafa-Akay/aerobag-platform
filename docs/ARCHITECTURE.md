@@ -37,6 +37,7 @@ Ağa genişleme (hub ve istasyonlar, istasyon başına okuma kapsamı, aktarma b
 - Gerçek yolcu verisi, gerçek kurum verisi, canlı sistemlere bağlantı.
 - Ödeme ve karmaşık kullanıcı yönetimi.
 - Çok istasyonlu ağ, havayolları arası (interline) bavul ve kayıp bavul dosyasının açılıp yönetilmesi (WorldTracer benzeri süreç). Sistem kayıp bavulu tespit eder, sonrasındaki süreci yönetmez.
+- Bagaj mutabakatı: yükleme yetkisi kararı (uçağa binmeyen yolcunun bavulunu yükletmeme) ve el terminaliyle okutma. Bu iş bagaj mutabakat sisteminindir (BRS); AeroBag onun ürettiği okumaları (BPM) ve indirme kayıtlarını (BUM) tüketir. Sonraki geliştirme aşamasına bırakıldı (`REMEDIATION_PLAN.md`, W13).
 
 ### 0.3 İddia politikası
 

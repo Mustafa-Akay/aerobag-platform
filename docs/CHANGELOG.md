@@ -4,6 +4,12 @@ Her iş paketinin ne yaptığı, neden yaptığı, bilinen sınırları ve testl
 
 Bu girdiler yazıldıkları andaki durumu anlatır; sonraki bir paket bir sınırı kapatmış olabilir (örneğin W4'te "W12'ye not edildi" denen jeton kapsamı W12a'da kapandı). W1 öncesindeki girdilerdeki "şema değişti, `docker compose down -v` gerekir" notları kaldırıldı: şema artık göçlerle güncellenir, veri korunur.
 
+## Toparlama, T9: bagaj mutabakatının sınırı (25 Kasım 2026)
+
+- **Sorun:** piyasadaki bagaj mutabakat sistemleri (BRS) incelenince takip tarafında AeroBag ile örtüşmenin beklenenden büyük olduğu görüldü. Mutabakatın asıl işi olan yükleme yetkisi kararı ve el terminaliyle okutma AeroBag'de yok, ama bu hiçbir belgede yazmıyordu. BRS'i bilen bir okuyucu bunu ilk soracaktı.
+- **Değişen:** `README.md`, `README.en.md`, `OZET.md` ve `ARCHITECTURE.md` (§0.2 Kapsam dışı) bu sınırı söyler: AeroBag mutabakat sisteminin ürettiği okumaları (BPM) ve indirme kayıtlarını (BUM) tüketir, yükleme kararını vermez. `REMEDIATION_PLAN.md`'ye sonraya bırakılan W13 paketi eklendi. Türkçe README'de eksik olan entegrasyon sınırı satırı (İngilizcede vardı) eklendi. Durum tablosuna T6, T7, T8 satırları eklendi.
+- **Kod değişmedi;** test sayısı aynı (416 .NET testi).
+
 ## Güvenlik incelemesi düzeltmeleri (10 Kasım 2026)
 
 Dışarıya açılmadan önce yapılan kod incelemesinde bulunan dört açık kapatıldı. Kritik bir açık bulunmadı; bunlar "demo varsayılanlarıyla gerçek ortama çıkılırsa" türündendi.

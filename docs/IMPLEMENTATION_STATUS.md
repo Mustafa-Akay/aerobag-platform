@@ -2,7 +2,7 @@
 
 `ARCHITECTURE.md` hedef tasarımı anlatır. Bu belge **şu an çalışan kodu** özetler: ne çalışıyor, tasarımdan nerede ayrışıyor, ne bilinçli olarak yok. Çelişki olursa bu belge koda daha yakındır; kodla çelişirse kod geçerlidir. Her iş paketinin ayrıntılı anlatısı, bilinen sınırları ve testleri [CHANGELOG.md](CHANGELOG.md)'dedir.
 
-Son güncelleme: 10 Kasım 2026 (güvenlik incelemesi düzeltmeleri).
+Son güncelleme: 25 Kasım 2026 (bagaj mutabakatının kapsam dışı olduğu yazıldı, W13).
 
 **Konum:** bir havayolunun bavul takip sisteminin tek istasyon modülü; yer hizmetleri ve havalimanı veri sağlayan taraf, ExitGuard isteğe bağlı havalimanı modülü (`ARCHITECTURE.md`, "Konumlandırma").
 
@@ -71,6 +71,7 @@ Testler: 416 .NET testi (birim + Testcontainers ile gerçek PostgreSQL), Python 
 9. **AODB bağlamı simülatörden** gelir (gövde tipi, hava, mesafeler, bant, kilometre taşları).
 10. **Sabitler:** çıkış süresi 180 sn ve yapılandırılamaz; ML durumu son çağrının sonucudur, servis ayrıca yoklanmaz.
 11. **Personel ekranları yalnızca Türkçe** (W9'un ikinci adımı).
+12. **Bagaj mutabakatı yok:** yükleme yetkisi kararı ve el terminaliyle okutma yapılmaz; binmeyen yolcunun bavulu yalnızca indirme kaydı (BUM) gelince `OFFLOADED_NO_SHOW` olur. Sonraya bırakıldı (W13).
 
 ## Yapılandırma
 

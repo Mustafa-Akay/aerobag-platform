@@ -155,6 +155,7 @@ All documents below are in Turkish.
 - **ExitGuard rates:** depend on sensor assumptions I chose; they were not measured in the field.
 - **Local setup:** TLS, a key vault, key rotation and multi-instance deployment are out of scope. The keys and passwords in the repository are development defaults.
 - **Flight context:** aircraft type, weather and distances come from the simulator, not from a real flight information system.
+- **Baggage reconciliation:** the load authorisation decision (not loading the bags of a passenger who did not board) and handheld scanning are not built. AeroBag consumes the reads and offload records that a reconciliation system produces. Left for a later development stage ([W13](docs/REMEDIATION_PLAN.md)).
 - **Integration:** messages are a simplified Type B over HTTP; there is no connection to SITA messaging, DCS, BRS, AODB or WorldTracer.
 - **Phase 5:** the RFID exit gate hardware demo is optional and was not built.
 

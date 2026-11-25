@@ -131,6 +131,11 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 - **Kapsam dışı (30 Ekim):** çıkış kapısına cihaz ya da personel koymak havalimanı işletmesinin kararıdır; sistemi kullanacak bir havayolu ya da yer hizmetleri şirketi bu maliyeti taşımaz ve bu soruyu sormaz. ExitGuard kodda, havalimanı tarafında isteğe bağlı bir modül olarak kalır.
 - **İleride düşünülebilecek, sınırıyla:** yolcunun bant başında kendi telefonuyla bavul etiketini okutup "bu benim bavulum" doğrulaması yapması. Cihaz ve personel gerektirmez, okutma bir "bavul sahibine ulaştı" kaydı da olur. Sınırı: gönüllüdür; yanlış bavulu alan yolcu onu kendi bavulu sandığı için okutmaz, yani en çok yakalanması gereken durumu kaçırır. Okutmanın yokluğu bir şey ifade etmez, uyarıya dayanak olamaz.
 
+#### W13. Bagaj mutabakatı (sonraya bırakıldı, 25 Kasım)
+- **Ne olurdu:** BSM'ye göre yükleme yetkisi kararı (bavul bu uçuşa ait mi, yolcusu check-in yaptı mı); uçağa binmeyen yolcunun bavullarının yerini gösteren indirme listesi; yükleme noktasında okutma için basit bir mobil web ekranı. Simülatörde binmeyen yolcu senaryosu ve yanlış uçağa yüklenen bavul.
+- **Neden şimdi değil:** bu iş bagaj mutabakat sisteminin (BRS) çekirdeğidir ve piyasada sahada çalışan ürünleri var; AeroBag bugün onların ürettiği okumaları (BPM) ve indirme kayıtlarını (BUM) tüketen taraf olarak kuruldu. Saha akışı (el terminali, okutma kuralları, yeniden etiketleme) gerçek kullanıcıdan geri bildirim almadan tasarlanırsa varsayım olur. Yeni özellik yok kararı (31 Ekim) sürüyor; sektörden gelecek geri bildirime göre yeniden değerlendirilecek.
+- **Bugünkü durum:** `OFFLOADED_NO_SHOW` durumu ve yolcu kartındaki "uçağa alınmadı" metni var; bunlar indirme kaydını yansıtır, kararı vermez.
+
 #### W12. Temizlik ve belge sadeleştirme (B12)
 - Ortak veritabanı yardımcıları tek yerde. `IMPLEMENTATION_STATUS.md` ikiye bölünür: kısa ve güncel bir durum belgesi ile ayrı bir değişiklik günlüğü (`CHANGELOG.md`).
 - **W12a. Yolcu jetonunun kapsamı (W4 canlı denemesinden, 29 Ekim):** jeton bavulu yalnızca etiket numarasıyla tanır; etiketler zamanla yeniden kullanılır. Jeton `etiket@uçuş` kapsamına alınır; `/v1/bags/{tag}` ve canlı kanal grupları da uçuşla birlikte çalışır. Güvenlik açığı olduğu için W12'nin kalanından ayrılıp Dalga 3'ün başına alındı.
@@ -166,3 +171,7 @@ Her paket için: mimarideki yeri (Domain / Application / Infrastructure / API / 
 | Toparlama: README görselleri (kayıp bavul, aktarma, İngilizce) | Tamam |
 | Toparlama: tek sayfalık özet (`OZET.md`) | Tamam |
 | Toparlama: gerçek veri planı (`GERCEK_VERI_PLANI.md`) | Tamam (plan yazıldı; temas ve veri bekliyor) |
+| Toparlama T6: güvenlik incelemesi düzeltmeleri | Tamam (PR #22) |
+| Toparlama T7: İngilizce README | Tamam (PR #23) |
+| Toparlama T8: lisans | Tamam (PR #24) |
+| W13 Bagaj mutabakatı | Sonraya bırakıldı (25 Kasım; kapsam dışı olduğu README, OZET ve ARCHITECTURE'a yazıldı) |
